@@ -1,0 +1,19 @@
+{
+  "piece_names": [
+    "ornate carved wooden sofa",
+    "matching carved wooden armchairs (overlapping; exact count uncertain)",
+    "three wooden coffee/side tables"
+  ],
+  "viewing_angle": "3/4 view, approximate",
+  "pixel_size": { "width": 1687, "height": 1130 },
+  "ground_contact_point_percent": { "x": 52, "y": 95 },
+  "ground_contact_note": "Approximate anchor for the composite set only; multiple feet touch the floor at different locations.",
+  "status": "incomplete",
+  "size_note": null,
+  "warnings": [
+    "Some furniture is occluded or cropped by the source frame; no missing parts were reconstructed.",
+    "The transparent cutout has visible reddish edge fringe and needs manual matte cleanup before catalog use.",
+    "Lighting and wood color were not reliably normalized; compare with the source before approving product color.",
+    "Separate per-piece cutouts and a contact-shadow layer were not produced because the pieces overlap substantially."
+  ]
+}

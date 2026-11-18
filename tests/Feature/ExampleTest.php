@@ -246,7 +246,16 @@ class ExampleTest extends TestCase
     {
         $this->seed();
 
-        $this->assertSame(25, FurnitureProduct::where('image_path', 'like', 'catalog:%')->count());
+        $suppliedImages = collect(\Illuminate\Support\Facades\File::files(public_path('images/catalog')))
+            ->filter(fn ($file) => in_array(strtolower($file->getExtension()), ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'svg'], true))
+            ->map(fn ($file) => 'catalog:'.$file->getFilename())
+            ->values()->all();
+        $this->assertNotEmpty($suppliedImages);
+        $this->assertEqualsCanonicalizing(
+            $suppliedImages,
+            FurnitureProduct::where('image_path', 'like', 'catalog:%')->pluck('image_path')->all(),
+            'Seeded catalog products must cover every supplied image exactly once.',
+        );
         $filenames = array_merge(array_map(fn ($number) => sprintf('drive-%02d.png', $number), range(1, 9)), ['catalog-console.png', 'catalog-3-pad.png', 'catalog-piano-with-s.png', 'catalog-605.png', 'catalog-channel.png']);
         foreach ($filenames as $filename) {
             $product = FurnitureProduct::where('image_path', 'catalog:'.$filename)->firstOrFail();

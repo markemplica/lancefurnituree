@@ -56,5 +56,10 @@ class DatabaseSeeder extends Seeder
         }
 
         $this->call(CustomerCatalogProductsSeeder::class);
+        $this->call(CustomizedCurvingDoorsSeeder::class);
+        $this->call(NamedFurnitureCollectionSeeder::class);
+        $this->call(ConsoleVanityCollectionSeeder::class);
+        $this->call(DiningCollectionSeeder::class);
+        $this->call(SalaCollectionSeeder::class);
     }
 }

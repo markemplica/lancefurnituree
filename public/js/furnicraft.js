@@ -764,9 +764,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const form = input.form;
         const clearSearch = document.querySelector('[data-search-clear]');
         const searchStatus = document.querySelector('[data-search-status]');
+        const applyButton = form.querySelector('[data-filter-apply]');
+        applyButton?.classList.add('d-none');
         let timer, searchController;
         let requestNumber = 0;
+        let resettingFilters = false;
         const clearFilters = () => {
+            resettingFilters = true;
             for (const name of ['category', 'style', 'wood_type', 'varnish_finish', 'min_price', 'max_price']) {
                 const field = form.elements.namedItem(name);
                 if (field) {
@@ -774,15 +778,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     field.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             }
+            resettingFilters = false;
         };
         const cancelSearch = () => {
             clearTimeout(timer);
             searchController?.abort();
             return ++requestNumber;
         };
-        input.addEventListener('input', () => {
+        const updateCatalog = (delay = 0) => {
             const currentRequest = cancelSearch();
             const query = input.value.trim();
+            const url = new URL(form.action);
+            // Keep all selected filters, but always restart at the first page.
+            for (const [name, value] of new FormData(form)) {
+                if (name !== 'page' && String(value).trim()) url.searchParams.set(name, String(value).trim());
+            }
             if (clearSearch) clearSearch.hidden = input.value.length === 0;
             box.hidden = true;
             box.innerHTML = '';
@@ -791,8 +801,6 @@ document.addEventListener('DOMContentLoaded', () => {
             timer = setTimeout(async () => {
                 const controller = new AbortController();
                 searchController = controller;
-                const url = new URL(form.action);
-                if (query) url.searchParams.set('q', query);
                 results.setAttribute('aria-busy', 'true');
                 try {
                     // One request uses the full catalog query, total, and pagination.
@@ -803,20 +811,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!updatedResults) throw new Error('Search unavailable');
                     if (currentRequest !== requestNumber || controller.signal.aborted) return;
                     results.innerHTML = updatedResults.innerHTML;
-                    clearFilters();
+                    applyButton?.classList.add('d-none');
                     history.replaceState(null, '', url);
                     const count = results.querySelector('[data-product-count]')?.textContent?.trim() ?? '';
                     if (searchStatus) searchStatus.textContent = query ? `${count} matching "${query}".` : `${count} in the catalog.`;
                 } catch (error) {
                     if (error.name === 'AbortError' || currentRequest !== requestNumber) return;
-                    const message = 'Search is temporarily unavailable. Results are unchanged. Press Enter to try again.';
+                    const message = 'Catalog results could not be updated. Results are unchanged. Select Apply or press Enter to try again.';
+                    applyButton?.classList.remove('d-none');
                     box.innerHTML = `<div class="p-3 text-muted" role="status">${message}</div>`;
                     box.hidden = false;
                     if (searchStatus) searchStatus.textContent = message;
                 } finally {
                     if (currentRequest === requestNumber) results.removeAttribute('aria-busy');
                 }
-            }, 280);
+            }, delay);
+        };
+        input.addEventListener('input', () => {
+            clearFilters();
+            updateCatalog(280);
+        });
+        form.addEventListener('change', (event) => {
+            if (!resettingFilters && event.target.matches('select, input[type="number"]')) updateCatalog();
         });
         if (clearSearch) {
             clearSearch.hidden = input.value.length === 0;
@@ -827,10 +843,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         input.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.isComposing) { cancelSearch(); clearFilters(); }
             if (event.key === 'Escape') box.hidden = true;
         });
-        form.addEventListener('submit', cancelSearch);
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            updateCatalog();
+        });
         document.addEventListener('click', (event) => {
             if (!input.closest('.search-wrap').contains(event.target)) box.hidden = true;
         });
