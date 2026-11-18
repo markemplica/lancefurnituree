@@ -1,4 +1,128 @@
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-product-photo-dropzone]').forEach((zone) => {
+        const input = zone.querySelector('[data-product-photo-input]');
+        const preview = zone.querySelector('[data-product-photo-preview]');
+        const status = zone.querySelector('[data-product-photo-status]');
+        const parent = zone.parentElement;
+        const error = parent.querySelector('[data-product-photo-error]');
+        const remove = parent.querySelector('[data-product-photo-remove]');
+        const existingPhoto = zone.dataset.existingPhoto;
+        let previewUrl;
+        let dragDepth = 0;
+
+        const clearPhoto = () => {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            previewUrl = undefined;
+            preview.onerror = null;
+            preview.hidden = !existingPhoto;
+            if (existingPhoto) preview.src = existingPhoto;
+            else preview.removeAttribute('src');
+            input.value = '';
+            input.setCustomValidity('');
+            input.setAttribute('aria-invalid', 'false');
+            error.hidden = true;
+            error.textContent = '';
+            status.textContent = existingPhoto ? 'Current product photo' : '';
+            remove.hidden = true;
+        };
+        const rejectPhoto = (message) => {
+            clearPhoto();
+            input.setCustomValidity(message);
+            input.setAttribute('aria-invalid', 'true');
+            error.textContent = message;
+            error.hidden = false;
+            remove.textContent = 'Clear selection';
+            remove.hidden = false;
+        };
+        const selectPhoto = (files) => {
+            if (!files.length) { clearPhoto(); return; }
+            if (files.length !== 1) { rejectPhoto('Choose one product photo at a time.'); return; }
+            const file = files[0];
+            const allowedType = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+                || (!file.type && /\.(jpe?g|png|webp)$/i.test(file.name));
+            if (!allowedType) { rejectPhoto('Choose a JPG, PNG, or WebP image.'); return; }
+            if (file.size > 4 * 1024 * 1024) { rejectPhoto('Choose an image no larger than 4 MB.'); return; }
+
+            clearPhoto();
+            // Dropped files must be attached to the real field for the normal form upload.
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            input.files = transfer.files;
+            previewUrl = URL.createObjectURL(file);
+            const currentUrl = previewUrl;
+            preview.onerror = () => {
+                if (previewUrl === currentUrl) rejectPhoto('This image could not be opened. Choose another photo.');
+            };
+            preview.src = currentUrl;
+            preview.hidden = false;
+            status.textContent = file.name;
+            remove.textContent = existingPhoto ? 'Keep current photo' : 'Remove photo';
+            remove.hidden = false;
+            const serverError = parent.querySelector('#image-error');
+            if (serverError) serverError.hidden = true;
+        };
+        input.addEventListener('change', () => selectPhoto([...input.files]));
+        remove.addEventListener('click', () => { clearPhoto(); input.focus(); });
+        input.form.addEventListener('reset', clearPhoto);
+        const draggingFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files');
+        zone.addEventListener('dragenter', (event) => {
+            if (!draggingFiles(event)) return;
+            event.preventDefault();
+            dragDepth++;
+            zone.classList.add('is-dragging');
+        });
+        zone.addEventListener('dragover', (event) => {
+            if (!draggingFiles(event)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+        zone.addEventListener('dragleave', (event) => {
+            event.preventDefault();
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (!dragDepth) zone.classList.remove('is-dragging');
+        });
+        zone.addEventListener('drop', (event) => {
+            if (!draggingFiles(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            dragDepth = 0;
+            zone.classList.remove('is-dragging');
+            selectPhoto([...event.dataTransfer.files]);
+        });
+    });
+
+    document.querySelectorAll('[data-basic-image-dropzone]').forEach((zone) => {
+        const input = zone.querySelector('input[type="file"]');
+        const status = document.getElementById(`${input.id}-upload-status`);
+        const maxBytes = Number(zone.dataset.maxBytes);
+        input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            let message = '';
+            if (input.files.length > 1) message = 'Choose one image at a time.';
+            else if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) message = 'Choose a JPG, PNG, or WebP image.';
+            else if (file && file.size > maxBytes) message = `Choose an image no larger than ${maxBytes / 1048576} MB.`;
+            input.setCustomValidity(message);
+            input.setAttribute('aria-invalid', String(Boolean(message)));
+            status.textContent = message || file?.name || '';
+        });
+        ['dragenter', 'dragover'].forEach((name) => zone.addEventListener(name, (event) => {
+            if (input.matches(':disabled') || ![...(event.dataTransfer?.types || [])].includes('Files')) return;
+            event.preventDefault();
+            zone.classList.add('is-dragging');
+        }));
+        zone.addEventListener('dragleave', () => zone.classList.remove('is-dragging'));
+        zone.addEventListener('drop', (event) => {
+            if (input.matches(':disabled')) return;
+            event.preventDefault();
+            zone.classList.remove('is-dragging');
+            if (!event.dataTransfer?.files.length) return;
+            const transfer = new DataTransfer();
+            for (const file of event.dataTransfer.files) transfer.items.add(file);
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+
     // Keep the native field for form submission and a no-JavaScript fallback.
     const scrollableFields = document.querySelectorAll('#catalog-filter-form select[name="category"], #catalog-filter-form select[name="wood_type"], #catalog-filter-form select[name="varnish_finish"]');
     for (const categoryField of scrollableFields) {

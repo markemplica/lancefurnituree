@@ -25,10 +25,10 @@
                 <input type="hidden" name="return_to" value="recommendations">
                 <fieldset class="vstack gap-3" data-room-upload-fieldset @disabled(!$preferenceComplete)>
                     <div>
-                        <label class="planner-image-input" data-room-dropzone for="room_image">
-                            <span data-room-input-placeholder>Input image</span>
+                        <label class="planner-image-input image-upload-zone" data-room-dropzone for="room_image">
+                            <span data-room-input-placeholder>Click to upload or drag and drop</span>
                             <img data-room-input-preview alt="Selected room photo" hidden>
-                            <input id="room_image" type="file" name="room_image" data-room-photo-input accept="image/jpeg,image/png,image/webp" required aria-label="Input image" aria-describedby="room-image-file-name">
+                            <input id="room_image" type="file" name="room_image" data-room-photo-input accept="image/jpeg,image/png,image/webp" required aria-label="Click to upload or drag and drop a room photo" aria-describedby="room-image-file-name">
                         </label>
                         <div id="room-image-file-name" class="form-text" data-room-file-name role="status" aria-live="polite"></div>
                         <div class="form-text">JPG, PNG, or WebP · Up to 8 MB.</div>

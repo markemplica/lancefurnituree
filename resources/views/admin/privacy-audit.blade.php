@@ -27,7 +27,17 @@
                 <td data-label="Activity"><strong class="privacy-action">{{ $actions[$event->action] ?? Str::headline($event->action) }}</strong></td>
                 <td data-label="Account & record"><span>{{ $event->user?->name ?? 'Account unavailable or system event' }}</span><small class="privacy-record">@if($event->subject_type){{ match($event->subject_type) { 'room_image' => 'Room photo', 'user' => 'Account', default => Str::headline($event->subject_type) } }}@if($event->subject_id !== null) #{{ $event->subject_id }}@endif @else No linked record @endif</small></td>
                 <td data-label="Details">
-                    <p class="privacy-detail-summary">@if(is_string($purpose)){{ $purposes[$purpose] ?? Str::headline($purpose) }}@elseif(isset($metadata['retention_days']))Retention period: {{ $metadata['retention_days'] }} days@elseif(isset($metadata['consent_version']))Consent version: {{ $metadata['consent_version'] }}@else No additional details recorded. @endif</p>
+                    <p class="privacy-detail-summary">
+                        @if(is_string($purpose))
+                            {{ $purposes[$purpose] ?? Str::headline($purpose) }}
+                        @elseif(isset($metadata['retention_days']))
+                            Retention period: {{ $metadata['retention_days'] }} days
+                        @elseif(isset($metadata['consent_version']))
+                            Consent version: {{ $metadata['consent_version'] }}
+                        @else
+                            No additional details recorded.
+                        @endif
+                    </p>
                     @if($metadata)
                     <details class="privacy-recorded-fields"><summary>Recorded fields</summary><dl>
                         @foreach($metadata as $key => $value)

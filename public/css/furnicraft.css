@@ -2795,3 +2795,79 @@ html:not([data-theme="dark"]) .customer-reservations-page { background-image: li
     .planner-photo-first .planner-preference-fields > [class*="col-md-"] { grid-template-columns: 1fr; }
     .planner-photo-first .planner-preference-fields .form-label { font-size: .8125rem; }
 }
+
+.image-upload-zone { position: relative; display: grid; place-items: center; min-height: 200px; width: 100%; max-width: 100%; padding: 20px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-accent); text-align: center; cursor: pointer; }
+.image-upload-zone input[type="file"] { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.image-upload-zone:focus-within { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.image-upload-zone.is-dragging { border-color: var(--color-accent); background: var(--color-surface-muted); }
+.image-upload-zone img[hidden] { display: none !important; }
+
+/* Selected Add furniture direction: a simple furniture record sheet. */
+.admin-page.furniture-record-page .page-content { max-width: 1120px; margin-inline: auto; }
+.admin-page.furniture-record-page .page-heading { margin-bottom: 26px; padding-bottom: 0; border: 0; align-items: end; }
+.admin-page.furniture-record-page .page-heading h1 { font-size: 2rem; font-weight: 400; }
+.admin-page.furniture-record-page .furniture-record {
+    padding: 30px 32px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 75%, var(--color-surface));
+    border-top: 3px solid var(--color-accent);
+    border-radius: 0;
+    background: var(--color-surface);
+}
+.furniture-record-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 22px; margin-bottom: 26px; border-bottom: 1px solid var(--color-border); }
+.admin-page main .furniture-record-heading h2 { margin: 0; font-family: var(--font-heading); font-size: 1.375rem; font-weight: 400; }
+.furniture-record-heading > span { color: var(--color-text-muted); font-size: .625rem; letter-spacing: .1em; text-transform: uppercase; }
+.furniture-record-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; }
+.furniture-record-column { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 26px; min-width: 0; }
+.admin-page .furniture-record .furniture-editor-section { min-width: 0; margin: 0; padding: 0; border: 0; }
+.admin-page main .furniture-record .furniture-editor-section h2 { margin-bottom: 18px; font-family: var(--font-body); font-size: .6875rem; font-weight: 500; letter-spacing: .055em; text-transform: uppercase; color: var(--color-text-muted); }
+.admin-page .furniture-record .furniture-field-grid { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; }
+.furniture-record .furniture-field-grid > [class*="col-"] { flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0; margin: 0; padding: 0; }
+.furniture-record .form-label { font-size: .8125rem; font-weight: 500; margin-bottom: 8px; }
+.admin-page main .furniture-record :is(.form-control, .form-select) { min-height: 42px; padding: 9px 11px; border-radius: var(--radius-sm); font-size: .8125rem; }
+.admin-page main .furniture-record textarea.form-control { min-height: 125px; }
+.furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .furniture-field-grid > .col-md-3 { display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; column-gap: 13px; }
+.furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .form-label { margin: 0; }
+.furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .invalid-feedback { grid-column: 2; }
+.furniture-record .input-group-text { background: var(--color-surface); }
+.furniture-record .furniture-size-note { width: 100%; margin: 0; font-size: .75rem; }
+.furniture-record-photo-mark { display: grid; place-items: center; width: 42px; height: 38px; margin-bottom: 3px; border: 1px solid var(--color-border); border-radius: 3px; color: var(--color-accent); font-size: 1.25rem; font-weight: 400; }
+.furniture-record-upload .form-label { margin: 0; }
+.furniture-record [data-product-photo-dropzone] { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 210px; padding: 24px 18px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-bg) 35%, var(--color-surface)); text-align: center; cursor: pointer; }
+.furniture-record [data-product-photo-dropzone]:is(:hover, :focus-within, .is-dragging) { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-surface-muted) 35%, var(--color-surface)); }
+.furniture-record [data-product-photo-dropzone]:focus-within { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.admin-page main .furniture-record [data-product-photo-input] { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; opacity: 0; cursor: pointer; }
+.furniture-record-photo-preview { display: block; width: 100%; max-height: 210px; object-fit: contain; }
+.furniture-record-photo-status { max-width: 100%; margin: 0; color: var(--color-text-muted); font-size: .75rem; overflow-wrap: anywhere; }
+.furniture-record-photo-status:empty { display: none; }
+.furniture-record-photo-remove { margin-top: 10px; padding: 5px 0; min-height: 36px; border: 0; background: transparent; color: var(--color-accent); font-size: .8125rem; text-decoration: underline; text-underline-offset: 3px; }
+.furniture-record :is([data-product-photo-preview], [data-product-photo-remove], [data-product-photo-error], #image-error)[hidden] { display: none !important; }
+.furniture-record-upload .form-text { margin: 0; }
+.furniture-record .furniture-image-hint { margin-top: 12px; }
+.admin-page .furniture-record > .furniture-section-availability { padding-top: 24px; margin-top: 28px; border-top: 1px solid var(--color-border); }
+.furniture-record .furniture-section-availability .furniture-field-grid > .col-md-3 { flex-basis: calc(50% - 8px); width: calc(50% - 8px); }
+.admin-page .furniture-record .furniture-editor-actions { position: static; margin-top: 26px; padding: 23px 0 0; background: transparent; }
+.furniture-record .furniture-editor-actions .furniture-required-note { margin: 0 auto 0 0; align-self: center; }
+.admin-page .furniture-record .furniture-editor-actions .btn { min-height: 42px; padding: 10px 18px; }
+.furniture-record .furniture-editor-actions .btn-outline-dark { border-color: transparent; color: var(--color-text-muted); }
+.furniture-record .furniture-editor-actions .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
+.furniture-record .furniture-editor-actions .btn-primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+@media (max-width: 991.98px) {
+    .admin-page.furniture-record-page .furniture-record { padding: 26px; }
+    .furniture-record-columns { gap: 28px; }
+    .furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .furniture-field-grid > .col-md-3 { grid-template-columns: 67px minmax(0, 1fr); column-gap: 10px; }
+}
+@media (max-width: 767.98px) {
+    .admin-page.furniture-record-page .page-heading { align-items: start; gap: 15px; }
+    .admin-page.furniture-record-page .page-heading h1 { font-size: 1.75rem; }
+    .admin-page.furniture-record-page .furniture-record { padding: 22px 18px; }
+    .furniture-record-heading { align-items: start; flex-direction: column; gap: 8px; padding-bottom: 20px; margin-bottom: 23px; }
+    .furniture-record-columns { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+    .furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .furniture-field-grid > .col-md-3 { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .furniture-record :is(.furniture-section-materials, .furniture-section-dimensions) .invalid-feedback { grid-column: 1; }
+    .admin-page main .furniture-record :is(.form-control, .form-select) { min-height: 44px; font-size: 1rem; }
+    .admin-page main .furniture-record-upload input[type="file"] { min-height: 36px; font-size: .6875rem; }
+    .furniture-record .furniture-section-availability .furniture-field-grid > .col-md-3 { flex-basis: 100%; width: 100%; }
+    .admin-page .furniture-record .furniture-editor-actions { flex-wrap: wrap; }
+    .furniture-record .furniture-editor-actions .furniture-required-note { width: 100%; margin-bottom: 8px; }
+    .admin-page .furniture-record .furniture-editor-actions .btn { min-height: 44px; }
+}

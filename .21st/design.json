@@ -1,0 +1,13 @@
+{
+  "framework": "Laravel Blade with Bootstrap and public/css/furnicraft.css",
+  "decisions": [
+    {
+      "surface": "admin.products.create and admin.products.edit",
+      "direction": "Furniture record",
+      "selectedConcept": 10,
+      "layout": "White record sheet with a brown top rule; product information and image on the left; materials, dimensions and tags on the right; pricing and actions below.",
+      "responsive": "Stack the form columns and field labels on phones.",
+      "tokens": "Reuse the existing FurniCraft color, typography and spacing tokens."
+    }
+  ]
+}
