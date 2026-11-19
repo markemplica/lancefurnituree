@@ -101,6 +101,8 @@ class RoomPreviewWorkflowPresentationTest extends TestCase
         $this->actingAs($user)->get(route('room.visualize', [$room, 'product' => $product->id]))->assertOk()
             ->assertSee('No confirmed doorway available')
             ->assertSee('No door has been placed because a complete doorway could not be confirmed.')
+            ->assertSee('data-manual-door-placement', false)
+            ->assertSee('Mark doorway corners')
             ->assertSee('Original photo shown');
     }
 }

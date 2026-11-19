@@ -28,27 +28,13 @@
             : ($previewIsDoor ? 'No confirmed doorway available' : 'No validated placement available'));
     $previewRollout = (int) config('roompreview.rollout_percent', 0);
     $previewV2Enabled = config('roompreview.use_v2_pipeline') && ($previewRollout >= 100 || ($previewRollout > 0 && (hexdec(substr(hash('sha256', (string) auth()->id()), 0, 7)) % 100) < $previewRollout));
-    $localEstimateIntro = $roomImage->gemini_consent_at
-        ? ($analysisRunning
-            ? ($previewIsDoor
-                ? 'The original room is shown while AI checks for a complete doorway frame. The door will appear only if a usable opening is found.'
-                : 'A quick local fit appears first while AI analyzes the room photo. The automatic placement will update when analysis is ready.')
-            : (($previewIsDoor && ! $hasPlacement)
-                ? 'No door has been placed because a complete doorway could not be confirmed. '.($roomImage->analysis_error ?: 'You can retry the room analysis.')
-                : 'A local 2D estimate is shown because an AI room fit is not available. '.($roomImage->analysis_error ?: 'You can retry the room analysis.')))
-        : (($previewIsDoor && ! $hasPlacement)
-            ? 'No door has been placed. This photo was not sent for AI analysis. Upload it again and opt in to AI analysis if you want an image-based fit.'
-            : 'A local 2D estimate is shown. This photo was not sent for AI analysis. Upload it again and opt in to AI analysis if you want an image-based fit.');
+    $autoEnhanceEnabled = $roomImage->gemini_consent_at && $previewV2Enabled && config('services.gemini.image_enabled');
 @endphp
 <div class="room-compare-layout">
     <aside class="room-compare-story">
         <p class="section-kicker">Your room, reimagined</p>
         <h1>See <span data-preview-name>{{ $selectedProduct?->name ?? 'furniture' }}</span> in your space.</h1>
-        <p class="small text-muted">This preview estimates placement from your photo's visible space and perspective. You do not need to enter room measurements.</p>
-        <p class="small text-muted">The exact catalog image is placed automatically in a 2D preview. Optional AI enhancement is available below.</p>
-        <p class="room-compare-intro">{{ $hasAiRoomFit
-            ? 'FurniCraft automatically positions and scales the selected furniture using the clear area and perspective detected in the room photo.'
-            : $localEstimateIntro }}</p>
+        <p class="room-compare-intro">{{ $hasAiRoomFit ? 'AI-guided visual estimate. Confirm dimensions with the shop.' : 'Estimated 2D fit from your room photo. Confirm dimensions with the shop.' }}</p>
 
 
 
@@ -80,29 +66,37 @@
 
     <section class="comparison-panel" aria-labelledby="comparison-heading">
         <header class="comparison-panel-head">
-            <div><span class="room-label">2D placement preview</span><h2 id="comparison-heading">Automatic 2D room preview</h2></div>
+            <div><span class="room-label">2D placement preview</span><h2 id="comparison-heading">2D room preview</h2></div>
             <span class="preview-status"><i aria-hidden="true"></i> Planning preview</span>
         </header>
 
-        @php($analysisLabel = ['completed' => 'AI room analysis complete', 'queued' => 'Room analysis queued', 'processing' => 'Analyzing room image', 'retrying' => 'AI temporarily unavailable · retrying', 'failed' => 'AI room analysis needs attention'][$roomImage->analysis_status] ?? 'Safe local room guidance')
+        @php($analysisLabel = ['completed' => 'AI analysis complete', 'queued' => 'Analysis queued', 'processing' => 'Analyzing room image', 'retrying' => 'AI unavailable · retrying', 'failed' => 'AI analysis needs attention'][$roomImage->analysis_status] ?? 'Local room guidance')
         <div class="alert {{ $roomImage->analysis_status === 'failed' ? 'alert-warning' : 'alert-light' }} fc-alert" role="status" aria-live="polite" data-room-analysis-watch="{{ route('room.analysis-status', $roomImage) }}" data-room-analysis-current="{{ $roomImage->analysis_status }}">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div><strong data-room-analysis-label>{{ $analysisLabel }}</strong><div class="small text-muted" data-room-analysis-message>{{ $roomImage->analysis_error ?: ($analysisRunning ? 'You may keep this page open; the final analysis will appear automatically.' : 'Placement confidence and detected room zones are shown below.') }}</div></div>
+                <div><strong data-room-analysis-label>{{ $analysisLabel }}</strong><div class="small text-muted" data-room-analysis-message>{{ $roomImage->analysis_error ?: ($analysisRunning ? 'Analysis will update automatically.' : 'Placement details are below.') }}</div></div>
                 @if(!$analysisRunning && !auth()->user()->isAdmin() && $roomImage->gemini_consent_at)
                     <form method="POST" action="{{ route('room.reanalyze', $roomImage) }}">@csrf<button class="btn btn-sm btn-outline-primary" type="submit">Re-analyze room</button></form>
                 @endif
             </div>
         </div>
 <div class="placement-status" aria-live="polite">
-            <div><span class="room-label">Selected furniture · planning preview</span><strong data-placement-status>{{ $initialPlacementStatus }}</strong></div>
+            <div><span class="room-label">Selected item</span><strong data-placement-status>{{ $initialPlacementStatus }}</strong></div>
             <span data-placement-dimensions></span>
             <p data-placement-guidance class="small mb-0"></p>
         </div>
+        @if($previewIsDoor)
+            <div class="manual-door-placement" data-manual-door-placement>
+                <button type="button" class="btn btn-sm btn-outline-dark" data-manual-door-mark aria-pressed="false">Mark doorway corners</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-manual-door-reset hidden>Reset marked corners</button>
+                <p class="small text-muted mb-0" data-manual-door-instructions role="status" aria-live="polite">{{ $hasPlacement ? 'A door placement is available. Mark its four corners to adjust the fit manually.' : 'If AI cannot confirm the doorway, mark its four room-facing corners: top-left, top-right, bottom-right, then bottom-left.' }} This visual estimate stays in this browser.</p>
+            </div>
+        @endif
 
         <script type="application/json" data-initial-placement-quad>@json(data_get($selectedPlacement, 'quad_percent'))</script>
 
                 <script type="application/json" data-preview-analysis>@json($roomImage->analysis ?? [])</script>
         <div class="room-preview-frame" data-room-preview
+            data-room-id="{{ $roomImage->id }}"
             data-visual-scale-policy='@json(config("roompreview.visual_scale"))'
             data-product-id="{{ $selectedProduct?->id }}" data-product-name="{{ $selectedProduct?->name }}"
             data-product-width="{{ $selectedProduct?->width_cm }}" data-product-depth="{{ $selectedProduct?->depth_cm }}" data-product-height="{{ $selectedProduct?->height_cm }}" data-product-dimensions-estimated="{{ $selectedProduct?->dimensions_estimated ? 'true' : 'false' }}"
@@ -116,6 +110,7 @@
             data-placement-status="{{ $roomImage->analysis_status }}" data-consented="{{ $roomImage->gemini_consent_at ? 'true' : 'false' }}"
             data-preview-v2-url="{{ $selectedProduct ? route('room.preview-v2.store', $roomImage) : '' }}"
             data-preview-v2-enabled="{{ $previewV2Enabled ? 'true' : 'false' }}"
+            data-auto-enhance="{{ $autoEnhanceEnabled ? 'true' : 'false' }}"
             data-verify-url="{{ $selectedProduct ? route('room.preview-verify', [$roomImage,$selectedProduct->id]) : '' }}"
             data-csrf="{{ csrf_token() }}">
             <img class="room-preview-source" src="{{ route('room-images.original', $roomImage) }}" alt="" data-preview-room>
@@ -125,9 +120,6 @@
         </div>
         <div class="preview-detection-row" data-preview-detections aria-live="polite"></div>
         <div class="room-preview-actions">
-                @if($roomImage->gemini_consent_at)
-                <button type="button" class="btn btn-outline-primary" data-preview-retry>{{ $previewV2Enabled ? 'Enhance preview with AI' : 'Check visual placement with AI' }}</button>
-                @endif
             <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
             <a class="btn btn-outline-secondary" href="{{ route('preferences.edit',['room'=>$roomImage->id]) }}#room-preview">Upload another photo</a>
         </div>
@@ -136,15 +128,39 @@
 
         
 
-        <div class="d-flex justify-content-end mt-3">
+        <div class="preview-footer-actions d-flex justify-content-end mt-3">
             @unless(auth()->user()->isAdmin())
+                @if($selectedProduct)
+                    <button type="button" class="btn btn-primary" data-reservation-open aria-haspopup="dialog" aria-controls="reservation-dialog">Reserve this furniture</button>
+                @endif
                 <a class="btn btn-outline-primary" href="{{ $recommendation ? route('recommendations.show', $recommendation) : route('preferences.edit', ['room' => $roomImage->id]).'#recommendation-form' }}">{{ $recommendation ? 'Back to recommendations' : 'Use room for recommendations' }}</a>
             @endunless
         </div>
-        <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
-            @if($roomImage->gemini_consent_at && !auth()->user()->isAdmin())<form method="POST" action="{{ route('room.ai-consent.revoke', $roomImage) }}" data-confirm="Stop future AI processing and delete generated previews for this photo?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-secondary" type="submit">Turn off AI for this photo</button></form>@endif
-            @unless(auth()->user()->isAdmin())<form method="POST" action="{{ route('room.destroy', $roomImage) }}" data-confirm="Delete this room photo and its generated previews?">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" type="submit">Delete room photo</button></form>@endunless
-        </div>
     </section>
 </div>
+@if($selectedProduct && !auth()->user()->isAdmin())
+<dialog id="reservation-dialog" class="reservation-dialog" aria-labelledby="reservation-dialog-title">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+        <h2 class="h4" id="reservation-dialog-title">Request a reservation</h2>
+        <button type="button" class="btn-close" data-reservation-close aria-label="Close reservation form"></button>
+    </div>
+    <p class="fw-semibold">{{ $selectedProduct->name }}</p>
+    <div data-reservation-message role="status" tabindex="-1" hidden></div>
+    <p class="small text-muted">This sends a request for shop review. It does not hold the item or collect payment; the shop will confirm availability.</p>
+    <form method="POST" action="{{ route('reservations.store') }}" class="vstack gap-3" data-reservation-form>
+        @csrf
+        <input type="hidden" name="furniture_product_id" value="{{ $selectedProduct->id }}">
+        <div>
+            <label class="form-label" for="visualize-preferred-visit-at">Preferred visit date and time <span class="text-muted">optional</span></label>
+            <input class="form-control" type="datetime-local" id="visualize-preferred-visit-at" name="preferred_visit_at" min="{{ now()->format('Y-m-d\\TH:i') }}">
+        </div>
+        <div>
+            <label class="form-label" for="visualize-reservation-notes">Notes <span class="text-muted">optional</span></label>
+            <textarea class="form-control" id="visualize-reservation-notes" name="notes" rows="3" maxlength="1000" placeholder="Questions or preferred viewing schedule"></textarea>
+        </div>
+        <button class="btn btn-primary" type="submit">Send reservation request</button>
+    </form>
+    <div class="text-center mt-3" data-reservation-done hidden><button type="button" class="btn btn-primary">Done</button></div>
+</dialog>
+@endif
 @endsection

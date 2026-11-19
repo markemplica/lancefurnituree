@@ -180,6 +180,101 @@ for (const surface of ['/room/1/visualize?product=1', '/recommendations/1']) {
     });
 }
 
+test('room preview layout stays readable without horizontal overflow', async ({ page }, info) => {
+    await page.goto('/room/1/visualize?product=1');
+    await expect(page.getByRole('heading', { name: 'Automatic 2D room preview' })).toBeVisible();
+    const layout = await page.evaluate(() => {
+        const status = document.querySelector('.placement-status');
+        const frame = document.querySelector('[data-room-preview]');
+        const title = document.querySelector('.room-compare-story h1');
+        const action = document.querySelector('.room-preview-actions [data-preview-download]');
+        const statusBox = status.getBoundingClientRect();
+        const frameBox = frame.getBoundingClientRect();
+        return {
+            scrollWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth,
+            statusDisplay: getComputedStyle(status).display,
+            statusChildren: [...status.children].map(child => Math.round(child.getBoundingClientRect().width)),
+            previewRatio: frameBox.width / frameBox.height,
+            titleSize: parseFloat(getComputedStyle(title).fontSize),
+            actionHeight: action.getBoundingClientRect().height,
+            statusWidth: statusBox.width,
+        };
+    });
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    if (info.project.name === 'mobile-edge') {
+        expect(layout.statusDisplay).toBe('grid');
+        expect(layout.statusChildren.every(width => width > 120)).toBe(true);
+        expect(layout.previewRatio).toBeLessThan(1);
+        expect(layout.titleSize).toBeLessThanOrEqual(45);
+        expect(layout.actionHeight).toBeGreaterThanOrEqual(44);
+    } else {
+        expect(layout.statusDisplay).toBe('grid');
+        expect(layout.statusChildren.every(width => width > 120)).toBe(true);
+        expect(layout.previewRatio).toBeGreaterThan(1);
+    }
+    await expect(page.getByRole('link', { name: 'Upload another photo' })).toBeVisible();
+    await page.screenshot({ path: join(evidenceDirectory, `room-preview-mobile-${info.project.name}.png`), fullPage: true });
+});
+
+test('ranked-match preview remains usable on a phone', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile-edge', 'Phone-specific check.');
+    await page.goto('/recommendations/1');
+    const preview = page.locator('#ai-room-preview');
+    await expect(preview).toBeVisible();
+    await expect(preview.getByRole('heading', { name: 'Automatic 2D room preview' })).toBeVisible();
+    const layout = await page.evaluate(() => {
+        const frame = document.querySelector('#ai-room-preview [data-room-preview]');
+        const box = frame.getBoundingClientRect();
+        return {
+            scrollWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth,
+            previewRatio: box.width / box.height,
+            statusDisplay: getComputedStyle(document.querySelector('#ai-room-preview .placement-status')).display,
+            overflows: [...document.querySelectorAll('body *')].map(element => {
+                const rect = element.getBoundingClientRect();
+                return {tag: element.tagName, className: String(element.className || '').slice(0, 100), width: Math.round(rect.width), left: Math.round(rect.left), right: Math.round(rect.right), scroll: element.scrollWidth};
+            }).filter(element => element.right > innerWidth + 2 || element.left < -2 || element.scroll > element.width + 2).slice(0, 25),
+        };
+    });
+    expect(layout.scrollWidth, JSON.stringify(layout.overflows)).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.previewRatio).toBeLessThan(1);
+    expect(layout.statusDisplay).toBe('grid');
+    await expect(preview.getByRole('link', { name: 'Upload another photo' })).toBeVisible();
+    await expect(preview.locator('[data-preview-download]')).toBeDisabled();
+    const retry = preview.locator('[data-preview-retry]');
+    if (await retry.count()) await expect(retry).toBeEnabled();
+    const chatLauncher = page.locator('.recommendation-chat-launcher');
+    await expect(chatLauncher).toHaveAccessibleName('Ask FurniCraft');
+    await chatLauncher.click();
+    const chat = page.getByRole('dialog', { name: 'Ask about these matches' });
+    await expect(chat).toBeVisible();
+    await chat.getByRole('button', { name: 'Close chat' }).click();
+    await expect(chat).toBeHidden();
+    await page.screenshot({ path: join(evidenceDirectory, 'ranked-match-preview-mobile.png'), fullPage: true });
+});
+
+test('door visualization provides a clear corner-marking fallback when AI has no fit', async ({ page }, info) => {
+    await page.goto('/room/1/visualize?product=2');
+    const controls = page.locator('[data-manual-door-placement]');
+    const frame = page.locator('[data-room-preview]');
+    await expect(controls).toBeVisible();
+    await controls.getByRole('button', { name: 'Mark doorway corners' }).click();
+    await frame.scrollIntoViewIfNeeded();
+    const photo = await frame.evaluate(element => {
+        const engine = element.roomPreviewEngine;
+        const rect = engine.containedPhotoRect();
+        return {left: rect.frameRect.left, top: rect.frameRect.top, photoLeft: rect.left, photoTop: rect.top, width: rect.width, height: rect.height};
+    });
+    for (const [x, y] of [[.11, .14], [.31, .14], [.31, .59], [.11, .59]]) {
+        await page.mouse.click(photo.left + photo.photoLeft + photo.width * x, photo.top + photo.photoTop + photo.height * y);
+    }
+    await expect(controls.locator('[data-manual-door-instructions]')).toContainText('Doorway corners saved');
+    await expect(frame).toHaveAttribute('data-placement-source', 'manual-door');
+    await expect(page.locator('[data-preview-download]')).toBeEnabled();
+    await page.screenshot({ path: join(evidenceDirectory, `doorway-manual-placement-${info.project.name}.png`) });
+});
+
 test.beforeEach(async ({ page }) => {
     pageErrors.set(page, []);
     page.on('pageerror', error => pageErrors.get(page).push(error.message));

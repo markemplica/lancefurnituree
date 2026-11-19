@@ -262,6 +262,17 @@
             this.existing = [...(this.vision?.existing_furniture || []), ...(this.analysis.existing_furniture || [])].map((item) => this.rectFromBbox(item.bbox)).filter(Boolean);
             this.itemType = `${frame.dataset.productType || ''} ${frame.dataset.productCategory || ''}`.toLowerCase();
             this.placementMode = this.placementModeFromServer() || this.placementModeFromType(this.itemType);
+            this.serverPlacementDefaults = Object.fromEntries([
+                'initialX', 'initialY', 'initialWidth', 'initialQuad', 'placementRenderable',
+                'placementSurface', 'placementSource', 'placementConfidence', 'placementScore',
+                'placementReason', 'placementFlip', 'placementRotation', 'placementPerspective',
+            ].map((key) => [key, frame.dataset[key]]));
+            let initialDoorQuad = null;
+            try { initialDoorQuad = JSON.parse(frame.dataset.initialQuad || 'null'); } catch (_) {}
+            this.serverDoorQuad = frame.dataset.placementRenderable === 'true'
+                && String(frame.dataset.placementSurface || '').toLowerCase() === 'opening'
+                ? doorQuad(initialDoorQuad)
+                : null;
             this.setupComparisonSlider();
             this.setupManualDoorPlacement();
         }
@@ -391,7 +402,14 @@
             this.manualDoorInstructions = controls.querySelector('[data-manual-door-instructions]');
 
             const savedQuad = this.readManualDoorQuad();
-            if (savedQuad) this.applyManualDoorQuad(savedQuad, { persist: false, render: false });
+            if (savedQuad && !this.serverDoorQuad) {
+                this.applyManualDoorQuad(savedQuad, { persist: false, render: false });
+            } else if (savedQuad) {
+                // Prefer newly validated AI geometry over stale browser-only manual marks.
+                // Keep the marks available to the customer as an explicit manual override.
+                if (this.manualDoorResetButton) this.manualDoorResetButton.hidden = false;
+                if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'AI detected a doorway. You can mark its corners manually to override the automatic fit.';
+            }
 
             this.manualDoorMarkButton?.addEventListener('click', () => {
                 if (this.manualDoorCapture) this.cancelManualDoorCapture();
@@ -399,13 +417,16 @@
             });
             this.manualDoorResetButton?.addEventListener('click', () => {
                 try { localStorage.removeItem(this.manualDoorStorageKey()); } catch (_) {}
-                this.cancelManualDoorCapture('Marked corners cleared. You can use automatic placement or mark the doorway again.');
-                this.frame.dataset.initialQuad = 'null';
-                this.frame.dataset.placementRenderable = 'false';
-                this.frame.dataset.placementSurface = 'opening';
-                this.frame.dataset.placementSource = 'placement-blocked';
-                this.frame.dataset.placementReason = '';
-                this.frame.dataset.placementScore = '0';
+                this.cancelManualDoorCapture(this.serverDoorQuad
+                    ? 'Manual marks cleared. The AI doorway placement is restored.'
+                    : 'Marked corners cleared. You can use automatic placement or mark the doorway again.');
+                Object.entries(this.serverPlacementDefaults).forEach(([key, value]) => {
+                    if (value === undefined) delete this.frame.dataset[key];
+                    else this.frame.dataset[key] = value;
+                });
+                this.initialConfidence = this.placementConfidenceFor(this.frame.dataset.placementConfidence);
+                this.placementConfidence = this.initialConfidence;
+                this.placementMode = this.placementModeFromServer() || this.placementModeFromType(this.itemType);
                 this.manualDoorResetButton.hidden = true;
                 this.manualDoorMarkButton.textContent = 'Mark doorway corners';
                 this.start();
@@ -684,7 +705,8 @@
             this.visibleProductPixelCount = 0;
             if (this.guidance) this.guidance.textContent = '';
             if (this.dimensions) this.dimensions.textContent = '';
-            const enhancementRequested = this.retryAiPreview === true;
+            const enhancementRetryRequested = this.retryAiPreview === true;
+            const enhancementRequested = enhancementRetryRequested || this.frame.dataset.autoEnhance === 'true';
             this.retryAiPreview = false;
             this.result = null;
             this.frame.dataset.finalPlacement = '';
@@ -736,7 +758,7 @@
                 if (this.dimensions) this.dimensions.textContent = 'This furniture item needs width, depth, and height in the catalog before it can be previewed.';
                 return;
             }
-            this.dimensions && (this.dimensions.textContent = `${dims.width} × ${dims.depth} × ${dims.height} cm ${dims.estimated ? 'standard planning estimate; confirm with shop' : 'catalog dimensions'}`);
+            this.dimensions && (this.dimensions.textContent = `${dims.width} × ${dims.depth} × ${dims.height} cm · ${dims.estimated ? 'estimated' : 'catalog size'}`);
             if (this.vision?.image_quality?.usable === false && !(this.placementMode === 'door' && this.openingForDoor(dims) && (this.vision.image_quality.issues || []).includes('no_floor_visible') && (this.vision.image_quality.issues || []).every((issue) => issue === 'no_floor_visible'))) {
                 this.drawRoomOnly();
                 const issue = (this.vision.image_quality.issues || [])[0] || 'no_floor_visible';
@@ -793,7 +815,7 @@
             if (this.frame.dataset.consented === 'true' && analysisPending) {
                 this.setProgress('AI room analysis is still running', false);
             } else if (enhancementRequested && this.frame.dataset.consented === 'true' && this.frame.dataset.previewV2Enabled === 'true' && this.frame.dataset.previewV2Url) {
-                aiImageShown = await this.generateAiPreview(runId, true);
+                aiImageShown = await this.generateAiPreview(runId, enhancementRetryRequested);
                 if (runId !== this.runId) return;
             } else if (enhancementRequested && !analysisPending && this.frame.dataset.consented === 'true' && this.frame.dataset.verifyUrl) {
                 this.setProgress('Checking the visual fit', false);
@@ -1382,8 +1404,8 @@
 
         report(place) {
             if (place?.source === 'manual-door') {
-                this.setStatus('Manual doorway placement · rough estimate', 'low');
-                if (this.guidance) this.guidance.textContent = 'The door follows the four corners you marked. This is a visual estimate, not a measurement; confirm the opening and product dimensions with the shop.';
+                this.setStatus('Marked doorway · estimate', 'low');
+                if (this.guidance) this.guidance.textContent = 'Follows your marked corners.';
                 if (this.detections) this.detections.innerHTML = '<span class="preview-badge is-rough">Manually marked doorway</span><span class="preview-badge is-rough">Rough estimate</span>';
                 return;
             }

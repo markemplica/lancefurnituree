@@ -35,6 +35,21 @@ $product = FurnitureProduct::create([
     'status' => 'active',
     'image_path' => 'demo:table.svg',
 ]);
+FurnitureProduct::create([
+    'name' => 'Browser Test Door',
+    'slug' => 'browser-test-door',
+    'category' => 'Door',
+    'description' => 'A test catalog door for manual doorway fallback checks.',
+    'wood_type' => 'Gmelina',
+    'varnish_finish' => 'Natural',
+    'style' => 'Traditional',
+    'price' => 18000,
+    'width_cm' => 90,
+    'depth_cm' => 4,
+    'height_cm' => 210,
+    'status' => 'active',
+    'image_path' => 'demo:door.svg',
+]);
 $preference = $customer->preference()->create([
     'furniture_type' => 'Table',
     'budget_min' => 10000,

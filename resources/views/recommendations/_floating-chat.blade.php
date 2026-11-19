@@ -21,7 +21,7 @@
             <div class="recommendation-chat-compose-footer"><small id="recommendation-chat-hint">Up to 1,000 characters</small><button class="btn btn-primary" type="submit">Ask FurniCraft</button></div>
         </form>
     </section>
-    <button class="recommendation-chat-launcher" type="button" data-chat-toggle aria-controls="recommendation-chat-panel" aria-expanded="false">
+    <button class="recommendation-chat-launcher" type="button" data-chat-toggle aria-label="Ask FurniCraft" aria-controls="recommendation-chat-panel" aria-expanded="false">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-5.5A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11.5h8M8 14.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Ask FurniCraft</span>
     </button>

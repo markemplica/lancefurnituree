@@ -66,7 +66,7 @@
             <p class="section-kicker">Your room, reimagined</p>
             <h2 id="inline-preview-heading">See <span data-inline-preview-name>{{ $previewProduct->name }}</span> in your space.</h2>
             <p class="inline-preview-intro">The selected furniture is automatically positioned and scaled using the room photo, visible floor area, and perspective.</p>
-            <p class="small text-muted">The exact catalog image is placed automatically in a 2D preview. Optional AI visual checking starts only when you select “Retry AI preview.”</p>
+            <p class="small text-muted">The exact catalog image is placed automatically in a 2D preview. AI visual checking is available after consent and a valid placement.</p>
 
             <div class="room-source-card inline-room-source">
                 <img src="{{ route('room-images.original', $room) }}" alt="Uploaded room thumbnail">

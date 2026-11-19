@@ -187,7 +187,9 @@ class GeminiRoomVisionService
                     try {
                         $retry = $this->retryMissingGeometry($analysisBytes, $analysisMime, $decoded);
                         if (is_array($retry)) {
-                            $retryZones = $this->sanitizeCandidateZones($retry['candidate_zones'] ?? []);
+                            $retryDoorZones = $this->sanitizeCandidateZones($retry['doorway_zones'] ?? []);
+                            $retryCandidateZones = $this->sanitizeCandidateZones($retry['candidate_zones'] ?? []);
+                            $retryZones = array_merge($retryDoorZones, $retryCandidateZones);
                             $decoded['candidate_zones'] = $this->mergePlacementZones($decoded['candidate_zones'], $retryZones);
                             $retryOpenings = $this->sanitizeRegions($retry['openings'] ?? []);
                             $decoded['openings'] = $this->mergeRegions($decoded['openings'], $retryOpenings);
@@ -298,25 +300,33 @@ class GeminiRoomVisionService
     private function retryMissingGeometry(string $imageBytes, string $imageMime, array $analysis): ?array
     {
         $point = ['type' => 'array', 'minItems' => 2, 'maxItems' => 2, 'items' => ['type' => 'number']];
+        $percentPoint = ['type' => 'array', 'minItems' => 2, 'maxItems' => 2, 'items' => ['type' => 'number', 'minimum' => 0, 'maximum' => 100]];
         $zone = ['type' => 'object', 'properties' => [
             'surface' => ['type' => 'string'],
             'anchor_x_percent' => ['type' => 'number'], 'anchor_y_percent' => ['type' => 'number'], 'max_width_percent' => ['type' => 'number'],
             'rotation_deg' => ['type' => 'number'], 'perspective_deg' => ['type' => 'number'], 'flip' => ['type' => 'boolean'],
             'suitable_types' => ['type' => 'array', 'items' => ['type' => 'string']],
             'quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
-            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
+            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $percentPoint],
             'clearance_score' => ['type' => 'number'], 'occlusion_score' => ['type' => 'number'],
             'confidence' => ['type' => 'string'], 'reason' => ['type' => 'string'], 'type' => ['type' => 'string'], 'label' => ['type' => 'string'],
         ], 'required' => ['surface', 'anchor_x_percent', 'anchor_y_percent', 'max_width_percent', 'suitable_types', 'clearance_score', 'occlusion_score', 'confidence', 'reason']];
+        $doorZone = $zone;
+        $doorZone['properties']['surface'] = ['type' => 'string', 'enum' => ['opening']];
+        $doorZone['properties']['door_fit_quad_percent'] = ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $percentPoint];
+        $doorZone['properties']['frame_complete'] = ['type' => 'boolean'];
+        $doorZone['required'] = array_values(array_unique(array_merge($doorZone['required'], ['door_fit_quad_percent', 'frame_complete'])));
         $region = ['type' => 'object', 'properties' => [
-            'label' => ['type' => 'string'], 'type' => ['type' => 'string'], 'polygon' => ['type' => 'array', 'items' => $point],
-            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
+            'label' => ['type' => 'string'], 'type' => ['type' => 'string', 'enum' => ['door', 'archway', 'entry', 'entrance', 'passage', 'closet']],
+            'polygon' => ['type' => 'array', 'minItems' => 3, 'maxItems' => 24, 'items' => $percentPoint],
+            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $percentPoint],
             'frame_complete' => ['type' => 'boolean'],
-        ], 'required' => ['label', 'polygon']];
+        ], 'required' => ['label', 'type', 'polygon', 'door_fit_quad_percent', 'frame_complete']];
         $schema = ['type' => 'object', 'properties' => [
             'candidate_zones' => ['type' => 'array', 'maxItems' => 6, 'items' => $zone],
+            'doorway_zones' => ['type' => 'array', 'maxItems' => 6, 'items' => $doorZone],
             'openings' => ['type' => 'array', 'maxItems' => 12, 'items' => $region],
-        ], 'required' => ['candidate_zones', 'openings']];
+        ], 'required' => ['candidate_zones', 'doorway_zones', 'openings']];
 
         $needs = [];
         $missingFamilies = $this->missingPlacementFamilies($this->sanitizeCandidateZones($analysis['candidate_zones'] ?? []));
@@ -326,9 +336,10 @@ class GeminiRoomVisionService
         if ($this->doorwayFitMissing($analysis)) {
             $needs[] = 'a complete doorway opening and four perspective-aware room-facing door_fit_quad_percent corners wherever a true full-height doorway is visible';
         }
-        $prompt = 'The first room analysis is missing validated furniture placement geometry. Inspect the same room photo again and return only the missing geometry. Needed: '.implode('; ', array_unique($needs)).'. Create up to six distinct, photo-grounded candidate zones covering broad furniture families (storage, bed, living set, dining, table/desk, seating) when safe. Coordinates use percentages 0-100 in the original image. Each floor or wall-floor zone must have a real visible anchor, safe width, suitable_types, clearance and occlusion scores, confidence, and reason. Only return an opening zone for a visible true doorway; its door_fit_quad_percent must be the actual room-facing frame corners ordered TL, TR, BR, BL, finite, non-degenerate, and perspective-aware. Never infer corners from a bounding box or use a window. Do not invent a placement when no safe area is visible. Existing first-pass geometry for reference: '.json_encode([
+        $prompt = 'The first room analysis is missing validated furniture placement geometry. Inspect the same room photo again and return only the missing geometry. Needed: '.implode('; ', array_unique($needs)).'. Create up to six distinct, photo-grounded candidate zones covering broad furniture families (storage, bed, living set, dining, table/desk, seating) when safe. Coordinates use percentages 0-100 in the original image coordinate system, with (0,0) at the top-left. For every detected complete doorway, put one opening zone in doorway_zones and one region in openings. These dedicated doorway entries require door_fit_quad_percent: exactly four points on the room-facing installation frame, ordered top-left, top-right, bottom-right, bottom-left. Trace the jambs closest to the camera from the header to the threshold; do not trace the open door leaf, glass/shower panel, inner/recessed edge, or a bounding rectangle. Use the first analysis opening labels and boxes below to focus on the same detected doorway. If the actual frame is obscured or incomplete, return no doorway entry instead of guessing. Never label a window or glass panel as a door. Each floor or wall-floor zone must have a real visible anchor, safe width, suitable_types, clearance and occlusion scores, confidence, and reason. Do not invent a placement when no safe area is visible. Existing first-pass geometry for reference: '.json_encode([
             'candidate_zones' => $analysis['candidate_zones'] ?? [],
             'openings' => $analysis['openings'] ?? [],
+            'vision_geometry_openings' => data_get($analysis, 'vision_geometry.openings', []),
         ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
 
         $response = $this->provider->generateText([
@@ -354,7 +365,9 @@ class GeminiRoomVisionService
 
     private function mergeRegions(array $original, array $retry): array
     {
-        return collect($original)->concat($retry)->unique(function (array $region) {
+        // Prefer retry geometry so an earlier incomplete opening with the same label
+        // cannot occupy the capped list before its newly validated fit corners.
+        return collect($retry)->concat($original)->unique(function (array $region) {
             return strtolower(trim($region['label'])).'|'.json_encode($region['door_fit_quad_percent']);
         })->take(12)->values()->all();
     }
