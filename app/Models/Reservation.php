@@ -7,6 +7,8 @@ use Illuminate\Support\Collection;
 
 class Reservation extends Model
 {
+    public const CUSTOMER_DELETED_ACTION = 'customer_deleted';
+
     protected $fillable = ['reference', 'user_id', 'furniture_product_id', 'recommendation_id', 'branch', 'preferred_visit_at', 'expires_at', 'notes', 'status', 'decline_reason', 'cancellation_reason', 'confirmed_at', 'confirmed_by', 'item_ready_confirmed_at', 'reminder_sent_at', 'completed_at', 'no_show_at'];
 
     protected function casts(): array

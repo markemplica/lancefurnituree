@@ -26,6 +26,8 @@ class RoomPreviewRasterService
 
         $image = @imagecreatefromstring($bytes);
         if (! $image) throw new RuntimeException('invalid_image');
+        $image = RoomImageOrientation::apply($image, $bytes);
+        $width = imagesx($image); $height = imagesy($image);
         $max = (int) config('roompreview.max_dimension', 1600);
         $scale = min(1, $max / max($width, $height));
         if ($scale < 1) {
@@ -61,6 +63,8 @@ class RoomPreviewRasterService
             if ($item) imagedestroy($item);
             return null;
         }
+        $room = RoomImageOrientation::apply($room, $roomBytes);
+        $item = RoomImageOrientation::apply($item, $furnitureBytes);
         $canvasWidth = imagesx($room);
         $canvasHeight = imagesy($room);
         imagepalettetotruecolor($item);
@@ -99,17 +103,30 @@ class RoomPreviewRasterService
         imagealphablending($room, true);
         $flip = ($placement['flip'] ?? 1) === -1 || ($placement['flip'] ?? false) === true;
         app(RoomPreviewLightingService::class)->apply($item, $room, $flip);
+        $layer = imagecreatetruecolor($canvasWidth, $canvasHeight);
+        imagealphablending($layer, false); imagesavealpha($layer, true);
+        imagefill($layer, 0, 0, imagecolorallocatealpha($layer, 0, 0, 0, 127));
+        $this->drawProjectedImage($layer, $item, $quad, $flip);
+        $visible = 0;
+        for ($y = $top; $y < $bottom; $y++) for ($x = $left; $x < $right; $x++) {
+            if (((imagecolorat($layer, $x, $y) >> 24) & 127) <= 119) $visible++;
+        }
+        if ($visible < 4) {
+            imagedestroy($layer); imagedestroy($item); imagedestroy($room);
+            return null;
+        }
         // Doors fill detected openings; a floor shadow would invent another object below the frame.
         if (! $opening && ($placement['surface'] ?? 'floor') !== 'wall') {
             $guardBounds = $this->contactShadows($room, $item, $quad, $flip, $guardBounds);
         }
-        $this->drawProjectedImage($room, $item, $quad, $flip);
+        imagecopy($room, $layer, 0, 0, 0, 0, $canvasWidth, $canvasHeight);
+        imagedestroy($layer);
         ob_start();
         imagepng($room);
         $bytes = (string) ob_get_clean();
         imagedestroy($item);
         imagedestroy($room);
-        return ['bytes' => $bytes, 'mime' => 'image/png', 'bounds' => [$left, $top, $right, $bottom], 'guard_bounds' => $guardBounds];
+        return ['bytes' => $bytes, 'mime' => 'image/png', 'bounds' => [$left, $top, $right, $bottom], 'guard_bounds' => $guardBounds, 'visible_product_pixels' => $visible];
     }
 
     private function contactShadows(\GdImage $room, \GdImage $item, array $quad, bool $flip, array $guard): array
@@ -185,6 +202,7 @@ class RoomPreviewRasterService
 
     private function openingQuad(mixed $points, int $width, int $height): ?array
     {
+        $points = DoorwayGeometry::quad($points);
         if (! is_array($points) || count($points) !== 4) return null;
         $quad = [];
         foreach (array_values($points) as $point) {
@@ -255,6 +273,7 @@ class RoomPreviewRasterService
             if ($flip) imageflip($source, IMG_FLIP_HORIZONTAL);
             imagecopyresampled($canvas, $source, (int) floor($x0), (int) floor($y0), 0, 0,
                 max(1, (int) ceil($x1) - (int) floor($x0)), max(1, (int) ceil($y3) - (int) floor($y0)), imagesx($source), imagesy($source));
+            if ($flip) imageflip($source, IMG_FLIP_HORIZONTAL);
             return;
         }
         $dx1 = $x1 - $x2; $dx2 = $x3 - $x2; $dx3 = $x0 - $x1 + $x2 - $x3;
@@ -303,23 +322,27 @@ class RoomPreviewRasterService
         $marginX = (int) ((imagesx($a)) * 0.025);
         $marginY = (int) ((imagesy($a)) * 0.025);
         $x1 -= $marginX; $x2 += $marginX; $y1 -= $marginY; $y2 += $marginY;
-        $changed = 0; $sampled = 0;
+        $changed = 0; $sampled = 0; $itemChanges = 0;
         $step = max(1, (int) floor(max(imagesx($a), imagesy($a)) / 160));
         for ($y = 0; $y < imagesy($a); $y += $step) for ($x = 0; $x < imagesx($a); $x += $step) {
-            if ($x >= $x1 && $x <= $x2 && $y >= $y1 && $y <= $y2) continue;
             $pa = imagecolorat($a, $x, $y); $pb = imagecolorat($b, $x, $y);
             $delta = abs((($pa >> 16) & 255) - (($pb >> 16) & 255))
                 + abs((($pa >> 8) & 255) - (($pb >> 8) & 255))
                 + abs(($pa & 255) - ($pb & 255));
+            if ($x >= $x1 && $x <= $x2 && $y >= $y1 && $y <= $y2) {
+                // A changed upper item region is required; a floor shadow alone is insufficient.
+                if ($y < $y2 - ($y2 - $y1) * .15 && $delta > 45 && (($pb >> 24) & 127) <= 119) $itemChanges++;
+                continue;
+            }
             if ($delta > 90) $changed++;
             $sampled++;
         }
         imagedestroy($a); imagedestroy($b);
         $ratio = $sampled ? $changed / $sampled : 1.0;
-        return ['supported' => true, 'passed' => $ratio <= (float) config('roompreview.pixel_difference_max', 0.05), 'changed_ratio' => round($ratio, 4)];
+        return ['supported' => true, 'passed' => $itemChanges >= 4 && $ratio <= (float) config('roompreview.pixel_difference_max', 0.05), 'changed_ratio' => round($ratio, 4), 'item_changed_samples' => $itemChanges];
     }
 
-    private function catalogImageBytes(FurnitureProduct $product): ?string
+    public function catalogImageBytes(FurnitureProduct $product): ?string
     {
         $path = (string) $product->image_path;
         if (str_starts_with($path, 'catalog:')) $path = public_path('images/catalog/'.substr($path, 8));

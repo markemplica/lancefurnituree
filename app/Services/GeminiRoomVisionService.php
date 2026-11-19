@@ -48,7 +48,7 @@ class GeminiRoomVisionService
 
     public function analyzeRoom(string $storagePath, ?float $width, ?float $depth, ?string $furnitureType = null, bool $throwOnFailure = false): array
     {
-        return $this->provider->withRequestLimit(min(1, (int) config('services.gemini.max_calls_per_operation', 3), (int) config('roompreview.max_provider_calls', 8)), fn () => $this->performRoomAnalysis($storagePath, $width, $depth, $furnitureType, $throwOnFailure));
+        return $this->provider->withRequestLimit(min(2, (int) config('services.gemini.max_calls_per_operation', 3), (int) config('roompreview.max_provider_calls', 8)), fn () => $this->performRoomAnalysis($storagePath, $width, $depth, $furnitureType, $throwOnFailure));
     }
 
     private function performRoomAnalysis(string $storagePath, ?float $width, ?float $depth, ?string $furnitureType, bool $throwOnFailure): array
@@ -81,6 +81,7 @@ class GeminiRoomVisionService
                 'clearance_score' => ['type' => 'number'], 'occlusion_score' => ['type' => 'number'], 'confidence' => ['type' => 'string'], 'reason' => ['type' => 'string'],
             ], 'required' => ['surface', 'anchor_x_percent', 'anchor_y_percent', 'max_width_percent', 'suitable_types', 'clearance_score', 'occlusion_score', 'confidence', 'reason']];
             $normalizedPointSchema = ['type' => 'array', 'minItems' => 2, 'maxItems' => 2, 'items' => ['type' => 'number', 'minimum' => 0, 'maximum' => 1]];
+            $text .= ' Coordinate contract: vision_geometry bboxes and ordinary polygons use fractions 0-1. Every field named door_fit_quad_percent uses percentages 0-100, including inside vision_geometry.openings. Store those same four room-facing corners in openings and candidate_zones when known, in TL, TR, BR, BL order. Do not replace them with an axis-aligned bbox. Use frame_complete=false for a cropped or partial frame and omit its fit corners.';
             $normalizedPolygonSchema = ['type' => 'array', 'minItems' => 3, 'maxItems' => 24, 'items' => $normalizedPointSchema];
             $visionGeometrySchema = ['type' => 'object', 'properties' => [
                 'image_quality' => ['type' => 'object', 'properties' => ['usable' => ['type' => 'boolean'], 'issues' => ['type' => 'array', 'items' => ['type' => 'string']]], 'required' => ['usable', 'issues']],
@@ -115,6 +116,8 @@ class GeminiRoomVisionService
                 ['text' => $text],
                 ['inline_data' => ['mime_type' => $analysisMime, 'data' => base64_encode($analysisBytes)]],
             ];
+            $schema['properties']['vision_geometry']['properties']['openings']['items']['properties']['door_fit_quad_percent'] = ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $pointSchema];
+            $schema['properties']['vision_geometry']['properties']['openings']['items']['properties']['frame_complete'] = ['type' => 'boolean'];
             $decoded = null;
             for ($attempt = 0; $attempt < 1; $attempt++) {
                 $response = $this->provider->generateText($parts, true, $schema, 'room_analysis', 25, 0, 1);
@@ -165,7 +168,7 @@ class GeminiRoomVisionService
                         ? trim($decoded[$key])
                         : $fallback[$key];
                 }
-                $decoded['floor_polygon'] = $this->sanitizePolygon($decoded['floor_polygon'] ?? []);
+                $decoded['floor_polygon'] = $this->sanitizeFloorPolygon($decoded['floor_polygon'] ?? []);
                 foreach (['wall_regions', 'openings', 'obstacles'] as $key) {
                     $decoded[$key] = $this->sanitizeRegions($decoded[$key] ?? []);
                 }
@@ -180,7 +183,34 @@ class GeminiRoomVisionService
                 $decoded['analyzed_furniture_type'] = $furnitureType;
                 $decoded['placement_profile_version'] = 2;
 
-                return array_merge($fallback, array_intersect_key($decoded, $fallback), ['gemini_used' => true, 'ai_provider' => AiProvider::name()]);
+                if ($this->needsGeometryRetry($decoded)) {
+                    try {
+                        $retry = $this->retryMissingGeometry($analysisBytes, $analysisMime, $decoded);
+                        if (is_array($retry)) {
+                            $retryZones = $this->sanitizeCandidateZones($retry['candidate_zones'] ?? []);
+                            $decoded['candidate_zones'] = $this->mergePlacementZones($decoded['candidate_zones'], $retryZones);
+                            $retryOpenings = $this->sanitizeRegions($retry['openings'] ?? []);
+                            $decoded['openings'] = $this->mergeRegions($decoded['openings'], $retryOpenings);
+                            $decoded['geometry_retry_attempted'] = true;
+                            $decoded['geometry_retry_succeeded'] = ! $this->needsGeometryRetry($decoded);
+                        }
+                    } catch (AiAggregateBudgetExceeded|AiRequestBudgetExceeded $e) {
+                        // The first analysis remains usable; the shared budget may refuse the optional recovery call.
+                        $decoded['geometry_retry_attempted'] = false;
+                        $decoded['geometry_retry_succeeded'] = false;
+                    } catch (\Throwable $e) {
+                        Log::notice('Gemini placement geometry retry failed', $this->provider->errorContext($e));
+                        $decoded['geometry_retry_attempted'] = true;
+                        $decoded['geometry_retry_succeeded'] = false;
+                    }
+                }
+
+                return array_merge($fallback, array_intersect_key($decoded, $fallback), [
+                    'gemini_used' => true,
+                    'ai_provider' => AiProvider::name(),
+                    'geometry_retry_attempted' => $decoded['geometry_retry_attempted'] ?? false,
+                    'geometry_retry_succeeded' => $decoded['geometry_retry_succeeded'] ?? false,
+                ]);
             }
             $this->telemetry->record('room', 'room_analysis', 'fallback', fallbackUsed: true, failureCode: 'invalid_response');
         } catch (\Throwable $e) {
@@ -193,12 +223,148 @@ class GeminiRoomVisionService
         return $fallback;
     }
 
+    private function needsGeometryRetry(array $analysis): bool
+    {
+        $zones = $this->sanitizeCandidateZones($analysis['candidate_zones'] ?? []);
+        $missingFamilies = $this->missingPlacementFamilies($zones);
+        return $missingFamilies !== [] || $this->doorwayFitMissing($analysis, $zones);
+    }
+
+    private function doorwayFitMissing(array $analysis, ?array $knownZones = null): bool
+    {
+        $zones = $knownZones ?? $this->sanitizeCandidateZones($analysis['candidate_zones'] ?? []);
+        $openings = collect($analysis['openings'] ?? [])
+            ->concat(data_get($analysis, 'vision_geometry.openings', []))
+            ->concat($zones)
+            ->filter(fn ($opening) => is_array($opening));
+        $doorwayDetected = $openings->contains(function (array $opening) {
+            $label = strtolower(implode(' ', array_filter([
+                $opening['type'] ?? null,
+                $opening['label'] ?? null,
+                $opening['reason'] ?? null,
+                is_array($opening['suitable_types'] ?? null) ? implode(' ', $opening['suitable_types']) : null,
+            ], 'is_string')));
+
+            return preg_match('/door|doorway|entry|entrance|archway|closet|passage/', $label)
+                && ! preg_match('/window|skylight|transom/', $label);
+        });
+        $hasDoorFit = $openings->contains(function (array $opening) {
+            $label = strtolower(implode(' ', array_filter([
+                $opening['type'] ?? null,
+                $opening['label'] ?? null,
+                is_array($opening['suitable_types'] ?? null) ? implode(' ', $opening['suitable_types']) : null,
+            ], 'is_string')));
+
+            return preg_match('/door|doorway|entry|entrance|archway|closet|passage/', $label)
+                && ! preg_match('/window|skylight|transom/', $label)
+                && DoorwayGeometry::quad($opening['door_fit_quad_percent'] ?? null) !== null;
+        });
+        $requestedDoor = preg_match('/door|doorway|entry|entrance/', strtolower((string) ($analysis['analyzed_furniture_type'] ?? '')));
+
+        return ($doorwayDetected || $requestedDoor) && ! $hasDoorFit;
+    }
+
+    private function missingPlacementFamilies(array $zones): array
+    {
+        $families = ['storage', 'bed', 'living-set', 'dining', 'table', 'seating'];
+
+        return array_values(array_filter($families, function (string $family) use ($zones) {
+            return ! collect($zones)->contains(function (array $zone) use ($family) {
+                if ($zone['surface'] === 'opening') return false;
+                if (in_array($family, ['storage', 'bed'], true) && $zone['surface'] !== 'wall-floor') return false;
+                $types = $zone['suitable_types'];
+                if ($types === []) return true;
+
+                foreach ($types as $type) {
+                    $type = strtolower($type);
+                    $matches = match ($family) {
+                        'storage' => preg_match('/cabinet|wardrobe|dresser|shelf|storage|cupboard/', $type),
+                        'bed' => preg_match('/bed|bunk|double.deck/', $type),
+                        'living-set' => preg_match('/sala|sofa|couch|sectional|living|lounge|receiving/', $type),
+                        'dining' => preg_match('/dining|table|chair|seating/', $type),
+                        'table' => preg_match('/table|desk/', $type),
+                        'seating' => preg_match('/chair|stool|bench|seat/', $type),
+                        default => false,
+                    };
+                    if ($matches) return true;
+                }
+
+                return false;
+            });
+        }));
+    }
+
+    /** One consent-gated, budgeted request that asks Gemini only for missing placement coordinates. */
+    private function retryMissingGeometry(string $imageBytes, string $imageMime, array $analysis): ?array
+    {
+        $point = ['type' => 'array', 'minItems' => 2, 'maxItems' => 2, 'items' => ['type' => 'number']];
+        $zone = ['type' => 'object', 'properties' => [
+            'surface' => ['type' => 'string'],
+            'anchor_x_percent' => ['type' => 'number'], 'anchor_y_percent' => ['type' => 'number'], 'max_width_percent' => ['type' => 'number'],
+            'rotation_deg' => ['type' => 'number'], 'perspective_deg' => ['type' => 'number'], 'flip' => ['type' => 'boolean'],
+            'suitable_types' => ['type' => 'array', 'items' => ['type' => 'string']],
+            'quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
+            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
+            'clearance_score' => ['type' => 'number'], 'occlusion_score' => ['type' => 'number'],
+            'confidence' => ['type' => 'string'], 'reason' => ['type' => 'string'], 'type' => ['type' => 'string'], 'label' => ['type' => 'string'],
+        ], 'required' => ['surface', 'anchor_x_percent', 'anchor_y_percent', 'max_width_percent', 'suitable_types', 'clearance_score', 'occlusion_score', 'confidence', 'reason']];
+        $region = ['type' => 'object', 'properties' => [
+            'label' => ['type' => 'string'], 'type' => ['type' => 'string'], 'polygon' => ['type' => 'array', 'items' => $point],
+            'door_fit_quad_percent' => ['type' => 'array', 'minItems' => 4, 'maxItems' => 4, 'items' => $point],
+            'frame_complete' => ['type' => 'boolean'],
+        ], 'required' => ['label', 'polygon']];
+        $schema = ['type' => 'object', 'properties' => [
+            'candidate_zones' => ['type' => 'array', 'maxItems' => 6, 'items' => $zone],
+            'openings' => ['type' => 'array', 'maxItems' => 12, 'items' => $region],
+        ], 'required' => ['candidate_zones', 'openings']];
+
+        $needs = [];
+        $missingFamilies = $this->missingPlacementFamilies($this->sanitizeCandidateZones($analysis['candidate_zones'] ?? []));
+        if ($missingFamilies !== []) {
+            $needs[] = 'safe zones for the currently missing furniture families: '.implode(', ', $missingFamilies);
+        }
+        if ($this->doorwayFitMissing($analysis)) {
+            $needs[] = 'a complete doorway opening and four perspective-aware room-facing door_fit_quad_percent corners wherever a true full-height doorway is visible';
+        }
+        $prompt = 'The first room analysis is missing validated furniture placement geometry. Inspect the same room photo again and return only the missing geometry. Needed: '.implode('; ', array_unique($needs)).'. Create up to six distinct, photo-grounded candidate zones covering broad furniture families (storage, bed, living set, dining, table/desk, seating) when safe. Coordinates use percentages 0-100 in the original image. Each floor or wall-floor zone must have a real visible anchor, safe width, suitable_types, clearance and occlusion scores, confidence, and reason. Only return an opening zone for a visible true doorway; its door_fit_quad_percent must be the actual room-facing frame corners ordered TL, TR, BR, BL, finite, non-degenerate, and perspective-aware. Never infer corners from a bounding box or use a window. Do not invent a placement when no safe area is visible. Existing first-pass geometry for reference: '.json_encode([
+            'candidate_zones' => $analysis['candidate_zones'] ?? [],
+            'openings' => $analysis['openings'] ?? [],
+        ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+
+        $response = $this->provider->generateText([
+            ['text' => $prompt],
+            ['inline_data' => ['mime_type' => $imageMime, 'data' => base64_encode($imageBytes)]],
+        ], true, $schema, 'room_analysis_geometry_retry', 25, 0, 1);
+        $decoded = json_decode($response, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function mergePlacementZones(array $original, array $retry): array
+    {
+        $zones = collect($retry)->concat($original)->unique(function (array $zone) {
+            return implode('|', [
+                $zone['surface'], round($zone['anchor_x_percent']), round($zone['anchor_y_percent']),
+                implode(',', $zone['suitable_types']),
+            ]);
+        })->take(6)->values();
+
+        return $zones->all();
+    }
+
+    private function mergeRegions(array $original, array $retry): array
+    {
+        return collect($original)->concat($retry)->unique(function (array $region) {
+            return strtolower(trim($region['label'])).'|'.json_encode($region['door_fit_quad_percent']);
+        })->take(12)->values()->all();
+    }
+
     /** Reduce provider-bound image pixels while preserving the original private upload. */
     private function prepareAnalysisImage(string $bytes, string $mime): array
     {
         $dimensions = @getimagesizefromstring($bytes);
         if (! is_array($dimensions)
-            || max((int) $dimensions[0], (int) $dimensions[1]) <= self::ANALYSIS_IMAGE_MAX_SIDE
+            || (max((int) $dimensions[0], (int) $dimensions[1]) <= self::ANALYSIS_IMAGE_MAX_SIDE && RoomImageOrientation::read($bytes) === 1)
             || ! function_exists('imagecreatefromstring')) {
             return [$bytes, $mime];
         }
@@ -211,8 +377,9 @@ class GeminiRoomVisionService
 
         $source = @imagecreatefromstring($bytes);
         if (! $source) return [$bytes, $mime];
-
-        $scale = self::ANALYSIS_IMAGE_MAX_SIDE / max((int) $dimensions[0], (int) $dimensions[1]);
+        $source = RoomImageOrientation::apply($source, $bytes);
+        $dimensions = [imagesx($source), imagesy($source)];
+        $scale = min(1, self::ANALYSIS_IMAGE_MAX_SIDE / max((int) $dimensions[0], (int) $dimensions[1]));
         $width = max(1, (int) round((int) $dimensions[0] * $scale));
         $height = max(1, (int) round((int) $dimensions[1] * $scale));
         $resized = imagecreatetruecolor($width, $height);
@@ -414,6 +581,8 @@ class GeminiRoomVisionService
         } catch (\Throwable $exception) {
             $this->telemetry->record('image', 'room_preview_verification', 'failure', failureCode: $this->telemetry->failureCode($exception));
             Log::warning('Room preview verification failed', $this->provider->errorContext($exception));
+            if ($exception instanceof AiAggregateBudgetExceeded || $exception instanceof AiRequestBudgetExceeded
+                || $exception instanceof \Illuminate\Http\Client\RequestException || $exception instanceof \Illuminate\Http\Client\ConnectionException) throw $exception;
             return $fallback;
         }
     }
@@ -524,9 +693,9 @@ class GeminiRoomVisionService
             if (! is_array($box) || count($box) !== 4 || ! collect($box)->every(fn ($v) => is_numeric($v) && $v >= 0 && $v <= 1) || ! in_array($type, ['door','window','archway'], true)) continue;
             [$x1,$y1,$x2,$y2] = array_map('floatval', $box);
             if ($x2 <= $x1 || $y2 <= $y1) continue;
-            if ($type === 'door' && (($y2-$y1)/max(0.001, $x2-$x1) < 1.8 || ($y2-$y1)/max(0.001, $x2-$x1) > 3.2)) continue;
-
-            $openings[] = ['type'=>$type,'bbox'=>[$x1,$y1,$x2,$y2],'base_y'=>is_numeric($opening['base_y'] ?? null) ? max(0,min(1,(float)$opening['base_y'])) : null,'is_open'=>(bool)($opening['is_open'] ?? false)];
+            $openings[] = ['type'=>$type,'bbox'=>[$x1,$y1,$x2,$y2],
+                'door_fit_quad_percent' => $type !== 'window' && ($opening['frame_complete'] ?? true) !== false ? DoorwayGeometry::quad($opening['door_fit_quad_percent'] ?? null) : null,
+                'base_y'=>is_numeric($opening['base_y'] ?? null) ? max(0,min(1,(float)$opening['base_y'])) : null,'is_open'=>(bool)($opening['is_open'] ?? false)];
         }
         $blocked = [];
         foreach (array_slice(is_array($geometry['blocked_zones'] ?? null) ? $geometry['blocked_zones'] : [], 0, 24) as $zone) {
@@ -563,6 +732,27 @@ class GeminiRoomVisionService
         })->filter()->values()->all();
     }
 
+    private function sanitizeFloorPolygon(mixed $polygon): array
+    {
+        if (! is_array($polygon) || count($polygon) < 3 || count($polygon) > 16) return [];
+        $points = [];
+        foreach ($polygon as $point) {
+            if (! is_array($point) || count($point) !== 2
+                || ! is_numeric($point[0] ?? null) || ! is_numeric($point[1] ?? null)
+                || ! is_finite((float) $point[0]) || ! is_finite((float) $point[1])
+                || (float) $point[0] < 0 || (float) $point[0] > 100
+                || (float) $point[1] < 0 || (float) $point[1] > 100) return [];
+            $points[] = [(float) $point[0], (float) $point[1]];
+        }
+        if (count(array_unique(array_map('json_encode', $points))) < 3) return [];
+        $area = 0.0;
+        foreach ($points as $i => [$x, $y]) {
+            [$nextX, $nextY] = $points[($i + 1) % count($points)];
+            $area += $x * $nextY - $nextX * $y;
+        }
+        return abs($area / 2) >= 0.5 ? $points : [];
+    }
+
     private function sanitizeRegions(mixed $regions): array
     {
         return collect(is_array($regions) ? $regions : [])->take(12)->map(function ($region) {
@@ -573,9 +763,10 @@ class GeminiRoomVisionService
             return [
                 'label' => substr(trim((string) ($region['label'] ?? 'region')), 0, 80),
                 'polygon' => $this->sanitizePolygon($region['polygon'] ?? []),
-                'door_fit_quad_percent' => count($fitQuad = $this->sanitizePolygon($region['door_fit_quad_percent'] ?? [])) === 4 ? $fitQuad : null,
+                'type' => substr((string) ($region['type'] ?? ''), 0, 30),
+                'door_fit_quad_percent' => ($region['frame_complete'] ?? true) !== false ? DoorwayGeometry::quad($region['door_fit_quad_percent'] ?? null) : null,
             ];
-        })->filter(fn ($region) => $region && count($region['polygon']) >= 3)->values()->all();
+        })->filter(fn ($region) => $region && (count($region['polygon']) >= 3 || $region['door_fit_quad_percent'] !== null))->values()->all();
     }
 
     private function sanitizeCandidateZones(mixed $zones): array
@@ -585,18 +776,38 @@ class GeminiRoomVisionService
                 return null;
             }
 
-            $surface = strtolower((string) ($zone['surface'] ?? 'floor'));
+            if (! is_string($zone['surface'] ?? null)) return null;
+            $surface = strtolower($zone['surface']);
+            if (! in_array($surface, ['floor', 'wall-floor', 'opening'], true)) return null;
+            if (array_key_exists('suitable_types', $zone)
+                && (! is_array($zone['suitable_types']) || collect($zone['suitable_types'])->contains(fn ($type) => ! is_string($type)))) return null;
+            foreach ([
+                'anchor_x_percent' => [5, 95], 'anchor_y_percent' => [30, 96], 'max_width_percent' => [1, 90],
+            ] as $key => [$minimum, $maximum]) {
+                $value = $zone[$key] ?? null;
+                if (! is_numeric($value) || ! is_finite((float) $value) || (float) $value < $minimum || (float) $value > $maximum) return null;
+            }
+            foreach (['rotation_deg' => [-18, 18], 'perspective_deg' => [-24, 24]] as $key => [$minimum, $maximum]) {
+                if (array_key_exists($key, $zone) && (! is_numeric($zone[$key]) || ! is_finite((float) $zone[$key]) || (float) $zone[$key] < $minimum || (float) $zone[$key] > $maximum)) return null;
+            }
+            foreach (['clearance_score', 'occlusion_score'] as $key) {
+                if (array_key_exists($key, $zone) && (! is_numeric($zone[$key]) || ! is_finite((float) $zone[$key]) || (float) $zone[$key] < 0 || (float) $zone[$key] > 100)) return null;
+            }
+            $quad = DoorwayGeometry::quad($zone['quad_percent'] ?? null);
+            $doorFit = ($zone['frame_complete'] ?? true) !== false ? DoorwayGeometry::quad($zone['door_fit_quad_percent'] ?? null) : null;
 
             return [
-                'surface' => in_array($surface, ['floor', 'wall-floor', 'opening'], true) ? $surface : 'floor',
-                'anchor_x_percent' => $this->clampPercent($zone['anchor_x_percent'] ?? 50, 5, 95),
-                'anchor_y_percent' => $this->clampPercent($zone['anchor_y_percent'] ?? 86, 30, 96),
-                'max_width_percent' => $this->clampPercent($zone['max_width_percent'] ?? 60, 1, 90),
-                'rotation_deg' => $this->clampPercent($zone['rotation_deg'] ?? 0, -18, 18),
-                'perspective_deg' => $this->clampPercent($zone['perspective_deg'] ?? 0, -24, 24),
+                'surface' => $surface,
+                'anchor_x_percent' => round((float) $zone['anchor_x_percent'], 1),
+                'anchor_y_percent' => round((float) $zone['anchor_y_percent'], 1),
+                'max_width_percent' => round((float) $zone['max_width_percent'], 1),
+                'rotation_deg' => round((float) ($zone['rotation_deg'] ?? 0), 1),
+                'perspective_deg' => round((float) ($zone['perspective_deg'] ?? 0), 1),
                 'flip' => filter_var($zone['flip'] ?? false, FILTER_VALIDATE_BOOLEAN),
-                'quad_percent' => count($quad = $this->sanitizePolygon($zone['quad_percent'] ?? [])) === 4 ? $quad : null,
-                'door_fit_quad_percent' => count($fitQuad = $this->sanitizePolygon($zone['door_fit_quad_percent'] ?? [])) === 4 ? $fitQuad : null,
+                'quad_percent' => $quad,
+                'type' => substr((string) ($zone['type'] ?? ''), 0, 30),
+                'label' => substr((string) ($zone['label'] ?? ''), 0, 80),
+                'door_fit_quad_percent' => $doorFit,
                 'suitable_types' => collect($zone['suitable_types'] ?? [])->take(8)->map(fn ($value) => substr(trim((string) $value), 0, 50))->filter()->values()->all(),
                 'clearance_score' => $this->clampPercent($zone['clearance_score'] ?? 50),
                 'occlusion_score' => $this->clampPercent($zone['occlusion_score'] ?? 25),

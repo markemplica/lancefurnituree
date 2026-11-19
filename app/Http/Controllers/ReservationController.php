@@ -23,7 +23,9 @@ class ReservationController extends Controller
 
         abort_unless($request->user()->role === 'customer', 403);
 
-        return view('reservations.index', ['reservations' => $request->user()->reservations()->with('product', 'transactions')->latest()->paginate(12)]);
+        return view('reservations.index', ['reservations' => $request->user()->reservations()
+            ->whereDoesntHave('transactions', fn ($query) => $query->where('action', Reservation::CUSTOMER_DELETED_ACTION))
+            ->with('product', 'transactions')->latest()->paginate(12)]);
     }
 
     public function store(ReservationStoreRequest $request)
@@ -76,6 +78,23 @@ class ReservationController extends Controller
             return [$reservation, $notifier->record($reservation, 'cancelled')];
         });
         $notifier->dispatch($reservation, $log);
-        return back()->with('success', 'The reservation request was cancelled.');
+        return back();
+    }
+
+    public function destroy(Request $request, Reservation $reservation)
+    {
+        abort_unless($reservation->user_id === $request->user()->id, 403);
+        DB::transaction(function () use ($request, $reservation) {
+            $current = Reservation::whereKey($reservation->id)->lockForUpdate()->firstOrFail();
+            abort_unless($current->user_id === $request->user()->id, 403);
+            abort_unless($current->status === 'cancelled', 422, 'Only cancelled requests can be removed from your list.');
+            // Customer list removal preserves the shop's reservation and cancellation history.
+            $current->transactions()->firstOrCreate(['action' => Reservation::CUSTOMER_DELETED_ACTION], [
+                'actor_id' => $request->user()->id,
+                'notes' => 'Removed from the customer reservation list.',
+            ]);
+        });
+
+        return redirect()->route('reservations.index');
     }
 }

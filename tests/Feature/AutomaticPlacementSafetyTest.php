@@ -68,14 +68,14 @@ class AutomaticPlacementSafetyTest extends TestCase
         $this->assertLessThanOrEqual(95, $bottom);
     }
 
-    public function test_missing_floor_geometry_keeps_the_labelled_rough_type_estimate(): void
+    public function test_missing_floor_geometry_does_not_invent_a_type_based_estimate(): void
     {
         $placement = app(FurniturePlacementService::class)->forProduct([], $this->product());
 
-        $this->assertTrue($placement['renderable']);
-        $this->assertSame('type-fallback', $placement['source']);
+        $this->assertFalse($placement['renderable']);
+        $this->assertSame('placement-blocked', $placement['source']);
         $this->assertSame('low', $placement['confidence']);
-        $this->assertSame('furniture-type-fallback', $placement['fit_basis']);
+        $this->assertSame('placement-geometry-missing', $placement['validation_status']);
     }
 
     public function test_sofa_footprint_can_stand_in_front_of_a_window_and_wall(): void

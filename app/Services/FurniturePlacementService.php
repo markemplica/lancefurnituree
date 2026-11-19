@@ -80,10 +80,12 @@ class FurniturePlacementService
         }
 
         if (str_contains($type, 'door')) {
+            $detected = collect($analysis['openings'] ?? [])->concat(data_get($analysis, 'vision_geometry.openings', []))
+                ->contains(fn ($opening) => is_array($opening) && preg_match('/door|entrance|entry|archway|closet|passage/i', ($opening['type'] ?? '').' '.($opening['label'] ?? '')));
             return $this->blockedPlacement(
                 $preferredSurface,
-                'no-opening',
-                'No reliable doorway opening was detected. FurniCraft will not place a door at an invented position; re-analyze a clearer photo that shows the full frame.',
+                $detected ? 'missing-door-corners' : 'no-opening',
+                $detected ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Reuse this saved photo and choose Re-analyze room to obtain usable corners.' : 'No reliable doorway opening was detected. FurniCraft will not place a door at an invented position; re-analyze a clearer photo that shows the full frame.',
                 $measurement,
             );
         }
@@ -185,6 +187,7 @@ class FurniturePlacementService
 
         if (str_contains($type, 'door')) {
             return ! $this->isWindowZone($zone)
+                && ($zone['frame_complete'] ?? true) !== false
                 && $surface === 'opening'
                 && $this->quad($zone['door_fit_quad_percent'] ?? null) !== null;
         }
@@ -203,6 +206,7 @@ class FurniturePlacementService
     private function isWindowZone(array $zone): bool
     {
         $description = strtolower(implode(' ', array_filter([
+            $zone['type'] ?? null,
             $zone['label'] ?? null,
             $zone['opening_label'] ?? null,
             $zone['region_label'] ?? null,
@@ -247,9 +251,9 @@ class FurniturePlacementService
             ->concat($geometry['blocked_zones'] ?? []);
 
         if (str_contains($type, 'door')) {
-            // The detected door leaf is the item being replaced, not a blocker.
-            $regions = $regions->reject(fn ($region) => is_array($region)
-                && preg_match('/door[_\s-]*leaf/i', (string) ($region['label'] ?? '')));
+            // A validated door replaces its own opening. Floor footprints, door swing and
+            // walkways describe floor furniture clearance, not the installation plane.
+            return false;
         } else {
             $regions = $regions->concat($analysis['openings'] ?? [])->concat($geometry['openings'] ?? []);
         }
@@ -306,18 +310,17 @@ class FurniturePlacementService
 
     private function openingZones(array $analysis): array
     {
-        return collect($analysis['openings'] ?? [])->map(function ($opening) {
-            $label = trim((string) ($opening['label'] ?? ''));
+        return collect($analysis['openings'] ?? [])->concat(data_get($analysis, 'vision_geometry.openings', []))->map(function ($opening) {
+            if (! is_array($opening)) return null;
+            if (($opening['frame_complete'] ?? true) === false) return null;
+            $label = trim(($opening['type'] ?? '').' '.($opening['label'] ?? ''));
             if ($this->isWindowZone(['label' => $label]) || ! preg_match('/door|doorway|entrance|entry|passage|archway|closet/', strtolower($label))) {
                 return null;
             }
 
-            $points = collect(is_array($opening) ? ($opening['door_fit_quad_percent'] ?? []) : [])
-                ->filter(fn ($point) => is_array($point) && isset($point[0], $point[1]) && is_numeric($point[0]) && is_numeric($point[1]));
-
-            if ($points->count() !== 4) {
-                return null;
-            }
+            $fit = $this->quad($opening['door_fit_quad_percent'] ?? null);
+            if (! $fit) return null;
+            $points = collect($fit);
 
             $minimumX = (float) $points->min(fn ($point) => $point[0]);
             $maximumX = (float) $points->max(fn ($point) => $point[0]);
@@ -337,7 +340,7 @@ class FurniturePlacementService
                 'confidence' => $analysis['scene_confidence'] ?? 'medium',
                 'reason' => 'Aligned to the detected ' . $label . ' frame.',
                 '_source' => 'scene-opening',
-                'door_fit_quad_percent' => $this->orderedQuad($points->values()->all()),
+                'door_fit_quad_percent' => $this->quad($points->values()->all()),
             ];
         })->filter()->values()->all();
     }
@@ -357,7 +360,15 @@ class FurniturePlacementService
 
         $floor = $this->floorPolygon($analysis);
         $floorFit = $this->fallbackFloorFit($analysis, $product, $type, $surface, (float) $defaults[2]);
-        if (count($floor) >= 3 && $floorFit === null) {
+        if (count($floor) < 3) {
+            return $this->blockedPlacement(
+                $surface,
+                'placement-geometry-missing',
+                'No validated floor placement area is available for this furniture. FurniCraft did not guess a position. Re-analyze a clear photo that shows the usable floor or choose another photo.',
+                $measurement,
+            );
+        }
+        if ($floorFit === null) {
             return $this->blockedPlacement(
                 $surface,
                 'no-clear-space',
@@ -367,9 +378,9 @@ class FurniturePlacementService
         }
 
         return [
-            'x_percent' => $floorFit['x'] ?? $defaults[0],
-            'y_percent' => $floorFit['y'] ?? $defaults[1],
-            'max_width_percent' => $floorFit['width'] ?? $this->clamp($defaults[2], 15, 90),
+            'x_percent' => $floorFit['x'],
+            'y_percent' => $floorFit['y'],
+            'max_width_percent' => $floorFit['width'],
             'floor_detected' => count($floor) >= 3,
             'rotation_deg' => 0,
             'perspective_deg' => 0,
@@ -378,15 +389,13 @@ class FurniturePlacementService
             'surface' => $surface,
             'confidence' => 'low',
             'score' => $floorFit ? 38 : 30,
-            'reason' => $floorFit
-                ? 'Automatically fitted inside the visible floor area detected in this room image. This is a 2D planning estimate; verify actual dimensions.'
-                : 'Automatically placed using a furniture-type layout estimate because no clear floor area was detected. Verify actual dimensions.',
+            'reason' => 'Automatically fitted inside the visible floor area detected in this room image. This is a 2D planning estimate; verify actual dimensions.',
             'needs_confirmation' => false,
-            'source' => $floorFit ? 'image-floor-fallback' : 'type-fallback',
+            'source' => 'image-floor-fallback',
             'renderable' => true,
             'validation_status' => 'advisory',
             'measurement_status' => $measurement['status'],
-            'fit_basis' => $floorFit ? 'detected-floor-area' : 'furniture-type-fallback',
+            'fit_basis' => 'detected-floor-area',
             'validation_messages' => $measurement['messages'],
         ];
     }
@@ -484,6 +493,8 @@ class FurniturePlacementService
         if (count($polygon) >= 3) {
             return $polygon;
         }
+        $fit = DoorwayGeometry::quad($region['door_fit_quad_percent'] ?? null);
+        if ($fit) return $fit;
 
         $bbox = $region['bbox'] ?? null;
         if (! is_array($bbox) || count($bbox) !== 4 || ! collect($bbox)->every(fn ($value) => is_numeric($value))) {
@@ -650,28 +661,7 @@ class FurniturePlacementService
 
     private function quad(mixed $quad): ?array
     {
-        if (! is_array($quad) || count($quad) < 4) {
-            return null;
-        }
-
-        return $this->orderedQuad($quad);
+        return DoorwayGeometry::quad($quad);
     }
 
-    private function orderedQuad(array $points): ?array
-    {
-        $valid = collect($points)->filter(fn ($point) => is_array($point) && isset($point[0], $point[1]) && is_numeric($point[0]) && is_numeric($point[1]))
-            ->map(fn ($point) => [$this->clamp($point[0], 0, 100), $this->clamp($point[1], 0, 100)])
-            ->values();
-
-        if ($valid->count() < 4) {
-            return null;
-        }
-
-        $topLeft = $valid->sortBy(fn ($point) => $point[0] + $point[1])->first();
-        $bottomRight = $valid->sortByDesc(fn ($point) => $point[0] + $point[1])->first();
-        $topRight = $valid->sortByDesc(fn ($point) => $point[0] - $point[1])->first();
-        $bottomLeft = $valid->sortBy(fn ($point) => $point[0] - $point[1])->first();
-
-        return [$topLeft, $topRight, $bottomRight, $bottomLeft];
-    }
 }

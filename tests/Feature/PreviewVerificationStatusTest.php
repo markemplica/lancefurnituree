@@ -35,7 +35,7 @@ class PreviewVerificationStatusTest extends TestCase
     private function checkSavedArtifact(bool $guardPasses, ?string $failure = null): void
     {
         Storage::fake('local');
-        config(['roompreview.max_generation_attempts' => 1]);
+        config(['roompreview.max_generation_attempts' => 1, 'roompreview.use_v2_pipeline' => true]);
         $user = User::factory()->create();
         $room = RoomImage::create(['user_id' => $user->id, 'image_path' => 'rooms/test.png', 'gemini_consent_at' => now(), 'analysis_status' => 'completed']);
         Storage::disk('local')->put($room->image_path, 'room-bytes');
@@ -62,7 +62,8 @@ class PreviewVerificationStatusTest extends TestCase
             $gemini->shouldNotReceive('verifyGeneratedRoom');
         } else {
             $gemini->shouldReceive('furnishRoom')->once()->andReturn(['bytes' => 'ai-bytes', 'mime_type' => 'image/png']);
-            $gemini->shouldReceive('verifyGeneratedRoom')->once()->andReturn(['passed' => true]);
+            if ($guardPasses) $gemini->shouldReceive('verifyGeneratedRoom')->once()->andReturn(['passed' => true]);
+            else $gemini->shouldNotReceive('verifyGeneratedRoom');
         }
         $raster = $this->mock(RoomPreviewRasterService::class);
         $raster->shouldReceive('normalize')->once()->andReturn(['bytes' => 'normalized-room', 'mime' => 'image/png', 'width' => 800, 'height' => 600, 'quality' => ['usable' => true]]);
@@ -73,7 +74,7 @@ class PreviewVerificationStatusTest extends TestCase
         $raster->shouldReceive('composite')->once()->andReturn(['bytes' => 'local-bytes', 'mime' => 'image/png']);
         app(RoomPreviewV2Service::class)->process($generation->id);
         $generation->refresh();
-        $this->assertSame($failure === 'quota' ? 'ai_request_limit_reached' : ($failure ? 'ai_generation_unavailable' : null), $generation->failure_code);
+        $this->assertSame($failure === 'quota' ? 'ai_request_limit_reached' : ($failure ? 'ai_generation_unavailable' : ($guardPasses ? null : 'generated_image_failed_local_checks')), $generation->failure_code);
         $this->assertSame($guardPasses ? 'completed' : 'fallback', $generation->status);
         $this->assertSame($guardPasses ? 'ai-bytes' : 'local-bytes', Storage::disk('local')->get($generation->placement_json['artifact_path']));
         if (!$guardPasses) {

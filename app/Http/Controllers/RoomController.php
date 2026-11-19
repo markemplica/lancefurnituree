@@ -198,11 +198,14 @@ class RoomController extends Controller
                 : back()->with('warning', $message);
         }
 
-        $roomImage->update([
-            'analysis_status' => 'queued',
-            'analysis_error' => null,
-            'analysis_requested_at' => now(),
-        ]);
+        $roomImage = DB::transaction(function () use ($roomImage) {
+            $current = RoomImage::whereKey($roomImage->id)->lockForUpdate()->firstOrFail();
+            abort_if(in_array($current->analysis_status, ['queued', 'processing', 'retrying'], true), 422, 'Room analysis is already in progress.');
+            abort_if($current->analysis_attempts > 0 && $current->analyzed_at?->gt(now()->subMinute()), 429, 'Please wait one minute before purchasing another room analysis.');
+            abort_unless(AiProvider::hasPhotoConsent($current), 422, 'Photo consent is required.');
+            $current->update(['analysis_status' => 'queued', 'analysis_error' => null, 'analysis_requested_at' => now()]);
+            return $current;
+        });
         AnalyzeRoomImage::dispatch($roomImage->id, 'all catalog furniture', true);
         $roomImage->refresh();
 
@@ -220,21 +223,29 @@ class RoomController extends Controller
     public function analysisStatus(Request $request, RoomImage $roomImage, GeminiService $gemini)
     {
         abort_unless($roomImage->user_id === $request->user()->id, 403);
-        RoomImage::recoverStalledForUser($request->user()->id);
-        $roomImage->refresh();
-
+        // Status GETs describe effective state without writing, dispatching or purchasing work.
+        if (in_array($roomImage->analysis_status, ['queued', 'processing', 'retrying'], true)
+            && ($roomImage->analysis_requested_at ?? $roomImage->updated_at)?->lt(now()->subMinutes(15))) {
+            $roomImage->analysis_status = 'failed';
+            $roomImage->analysis_error = 'Room analysis timed out. Re-analyze this saved photo to try again.';
+        }
+        if ($roomImage->analysis_status === 'completed' && data_get($roomImage->analysis, 'vision_geometry.image_quality.usable') === false) {
+            $roomImage->analysis_status = 'fallback';
+            $analysis = $roomImage->analysis;
+            $analysis['gemini_used'] = false;
+            $roomImage->analysis = $analysis;
+        }
         if ($roomImage->analysis_status === 'queued' && (! AiProvider::hasPhotoConsent($roomImage) || ! $gemini->isConfigured())) {
-            RoomImage::whereKey($roomImage->id)->where('analysis_status', 'queued')->update([
-                'analysis_status' => 'fallback',
-                'analysis_error' => $roomImage->gemini_consent_at
+            $roomImage->fill([
+                'analysis_status' => 'fallback', 'analysis_error' => $roomImage->gemini_consent_at
                     ? 'AI is not configured; safe local planning guidance is being used.'
                     : 'AI image processing was not authorized; local planning guidance is being used.',
                 'analyzed_at' => now(),
             ]);
-            $roomImage->refresh();
         }
 
         $ready = in_array($roomImage->analysis_status, ['completed', 'fallback'], true);
+        $product = $request->integer('product') ? \App\Models\FurnitureProduct::active()->find($request->integer('product')) : null;
 
         return response()->json([
             'status' => $roomImage->analysis_status,
@@ -243,6 +254,8 @@ class RoomController extends Controller
             'ready' => $ready,
             'analyzed_at' => $roomImage->analyzed_at?->toIso8601String(),
             'analysis' => $ready ? $roomImage->analysis : null,
+            'product_id' => $product?->id,
+            'placement' => $ready && $product ? app(\App\Services\FurniturePlacementService::class)->forProduct($roomImage->analysis ?? [], $product) : null,
         ]);
     }
 }

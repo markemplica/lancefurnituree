@@ -19,7 +19,7 @@ export default async function globalSetup() {
         DB_CONNECTION: 'sqlite', DB_DATABASE: databasePath,
         PRIVATE_STORAGE_ROOT: join(directory, 'private'),
         CACHE_STORE: 'array', SESSION_DRIVER: 'file', QUEUE_CONNECTION: 'sync',
-        MAIL_MAILER: 'array', GEMINI_API_KEY: '', LOG_CHANNEL: 'single',
+        MAIL_MAILER: 'array', GEMINI_API_KEY: '', GEMINI_ENABLED: 'false', LOG_CHANNEL: 'single',
     };
     execFileSync('php', ['artisan', 'migrate', '--force', '--no-ansi'], { env: environment, stdio: 'pipe' });
     execFileSync('php', ['tests/Browser/seed-mobile.php'], { env: environment, stdio: 'pipe' });
@@ -37,7 +37,9 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if ($path !== '/' && is_file('${publicRoot}'.$path)) return false;
 require '${publicRoot}/index.php';
 `);
-    const server = spawn('php', ['-d', `upload_tmp_dir=${directory}`, '-S', '127.0.0.1:8001', '-t', 'public', router], {
+    const server = spawn('php', ['-d', `upload_tmp_dir=${directory}`,
+        ...(process.env.FURNICRAFT_BROWSER_NO_GD === '1' ? ['-d', 'disable_functions=imagecreatefromstring,imagepng'] : []),
+        '-S', '127.0.0.1:8001', '-t', 'public', router], {
         env: environment, stdio: 'ignore', windowsHide: true,
     });
     let ready = false;

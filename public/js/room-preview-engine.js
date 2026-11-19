@@ -109,7 +109,7 @@
                 maxY = Math.max(maxY, y);
             }
         }
-        if (maxX < minX || maxY < minY) return { x: 0, y: 0, width: sourceWidth, height: sourceHeight };
+        if (maxX < minX || maxY < minY) return null;
         return {
             x: minX * sourceWidth / width,
             y: minY * sourceHeight / height,
@@ -118,6 +118,18 @@
         };
     };
     const polygon = (value) => Array.isArray(value) ? value.map(normalizePoint).filter(Boolean) : [];
+    const doorQuad = (value) => {
+        if (!Array.isArray(value) || value.length !== 4 || value.some(p => !Array.isArray(p) || p.length !== 2 || p.some(v => v === null || v === '' || !Number.isFinite(Number(v))))) return null;
+        const scale = Math.max(...value.flat().map(Number)) <= 1 ? 1 : 100;
+        const quad = value.map(p => p.map(v => Number(v) / scale));
+        if (quad.flat().some(v => v < 0 || v > 1)) return null;
+        for (let i=0;i<4;i++) {
+            const [a,b,c]=[quad[i],quad[(i+1)%4],quad[(i+2)%4]];
+            if ((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]) <= .0000001) return null;
+        }
+        if (quad[0][0]>=quad[1][0] || quad[3][0]>=quad[2][0] || quad[0][1]+quad[1][1]>=quad[2][1]+quad[3][1]) return null;
+        return quad;
+    };
     const detectedFloorPolygon = (vision, analysis) => {
         const visionFloor = polygon(vision?.floor_polygon);
         if (visionFloor.length >= 3) return visionFloor;
@@ -198,6 +210,10 @@
     class RoomPreviewEngine {
         constructor(frame) {
             this.frame = frame;
+            this.manualDoorCapture = false;
+            this.manualDoorPoints = [];
+            if (frame.roomPreviewEngine) frame.roomPreviewEngine.runId++;
+            frame.roomPreviewEngine = this;
             this.scalePolicy = readJson({textContent: frame.dataset.visualScalePolicy || 'null'}, null);
             this.canvas = frame.querySelector('[data-room-preview-canvas]');
             this.context = this.canvas?.getContext('2d');
@@ -231,20 +247,23 @@
                 const floorTop = clamp(this.horizon + 0.18, 0.52, 0.72);
                 this.floor = [[0.17, floorTop], [0.83, floorTop], [0.99, 0.99], [0.01, 0.99]];
             }
-            const visionOpeningRegions = (this.vision?.openings || []).map((opening) => ({ polygon: this.bboxPolygon(opening.bbox), type: opening.type }));
+            const visionOpeningRegions = (this.vision?.openings || []).map((opening) => ({ polygon: this.regionPolygon(opening), type: opening.type }));
+            const candidateOpenings = (this.analysis.candidate_zones || []).filter(zone => zone.surface === 'opening')
+                .map(zone => ({...zone, label:`${zone.label || ''} ${(zone.suitable_types || []).join(' ')} ${zone.reason || ''}`}));
             // Prefer the validated room-facing legacy door quad when both schemas describe the same opening.
-            this.openings = [...(this.analysis.openings || []), ...(this.vision?.openings || [])];
-            this.blocked = [...(this.vision?.blocked_zones || []), ...(this.analysis.blocked_zones || []), ...(this.analysis.obstacles || []), ...(this.analysis.openings || []), ...visionOpeningRegions]
+            this.openings = [...(this.analysis.openings || []), ...(this.vision?.openings || []), ...candidateOpenings];
+            this.blocked = [...(this.vision?.blocked_zones || []), ...(this.analysis.blocked_zones || []), ...(this.analysis.obstacles || []), ...(this.analysis.openings || []), ...visionOpeningRegions, ...candidateOpenings]
                 .map((region) => this.regionPolygon(region)).filter((shape) => shape.length >= 3);
             // Windows and wall-adjacent floor restrictions may sit behind a sofa.
             // Doorways must also remain visible above its floor footprint.
-            this.bodyBlocked = [...(this.analysis.openings || []), ...visionOpeningRegions]
+            this.bodyBlocked = [...(this.analysis.openings || []), ...visionOpeningRegions, ...candidateOpenings]
                 .filter((region) => !/window|skylight|transom/i.test(`${region.type || ''} ${region.label || ''}`))
                 .map((region) => this.regionPolygon(region)).filter((shape) => shape.length >= 3);
             this.existing = [...(this.vision?.existing_furniture || []), ...(this.analysis.existing_furniture || [])].map((item) => this.rectFromBbox(item.bbox)).filter(Boolean);
             this.itemType = `${frame.dataset.productType || ''} ${frame.dataset.productCategory || ''}`.toLowerCase();
             this.placementMode = this.placementModeFromServer() || this.placementModeFromType(this.itemType);
             this.setupComparisonSlider();
+            this.setupManualDoorPlacement();
         }
 
         placementModeFromType(type) {
@@ -257,6 +276,170 @@
             const label = String(value || '').toLowerCase();
             const zoneConfidence = ({ high: 0.9, medium: 0.68, low: 0.42 })[label];
             return zoneConfidence === undefined ? this.roomConfidence : Math.min(this.roomConfidence, zoneConfidence);
+        }
+
+        manualDoorStorageKey() {
+            return `furnicraft:manual-door:${this.frame.dataset.roomId || this.frame.dataset.productId || 'room'}`;
+        }
+
+        readManualDoorQuad() {
+            try {
+                const value = JSON.parse(localStorage.getItem(this.manualDoorStorageKey()) || 'null');
+                return doorQuad(value);
+            } catch (_) {
+                return null;
+            }
+        }
+
+        applyManualDoorQuad(value, { persist = true, render = true } = {}) {
+            const quad = doorQuad(value);
+            if (!quad) return false;
+            const box = bounds(quad);
+            this.frame.dataset.initialX = String(((box.minX + box.maxX) / 2) * 100);
+            this.frame.dataset.initialY = String(box.maxY * 100);
+            this.frame.dataset.initialWidth = String((box.maxX - box.minX) * 100);
+            this.frame.dataset.initialQuad = JSON.stringify(quad);
+            this.frame.dataset.placementRenderable = 'true';
+            this.frame.dataset.placementSurface = 'opening';
+            this.frame.dataset.placementSource = 'manual-door';
+            this.frame.dataset.placementConfidence = 'low';
+            this.frame.dataset.placementScore = '40';
+            this.frame.dataset.placementReason = 'Doorway corners marked manually in this browser.';
+            this.placementMode = 'door';
+            this.initialConfidence = this.placementConfidenceFor('low');
+            this.placementConfidence = this.initialConfidence;
+            this.manualDoorCapture = false;
+            this.manualDoorPoints = [];
+            this.frame.classList.remove('manual-door-marking');
+            this.clearManualDoorMarkers();
+
+            if (persist) {
+                try { localStorage.setItem(this.manualDoorStorageKey(), JSON.stringify(quad)); } catch (_) {}
+            }
+            if (this.manualDoorMarkButton) {
+                this.manualDoorMarkButton.textContent = 'Adjust marked corners';
+                this.manualDoorMarkButton.setAttribute('aria-pressed', 'false');
+            }
+            if (this.manualDoorResetButton) this.manualDoorResetButton.hidden = false;
+            if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'Doorway corners saved in this browser. The overlay is a visual estimate; confirm measurements with the shop.';
+            if (render) this.start();
+            return true;
+        }
+
+        clearManualDoorMarkers() {
+            this.frame.querySelectorAll('[data-manual-door-marker]').forEach((marker) => marker.remove());
+        }
+
+        containedPhotoRect() {
+            const frameRect = this.frame.getBoundingClientRect();
+            const imageWidth = this.room?.naturalWidth || 0;
+            const imageHeight = this.room?.naturalHeight || 0;
+            if (!frameRect.width || !frameRect.height || !imageWidth || !imageHeight) return null;
+            const aspect = imageWidth / imageHeight;
+            let width = frameRect.width;
+            let height = frameRect.height;
+            if (width / height > aspect) width = height * aspect;
+            else height = width / aspect;
+            return { frameRect, left: (frameRect.width - width) / 2, top: (frameRect.height - height) / 2, width, height };
+        }
+
+        addManualDoorMarker(point, number, photoRect) {
+            const marker = document.createElement('span');
+            marker.className = 'manual-door-mark-point';
+            marker.dataset.manualDoorMarker = 'true';
+            marker.setAttribute('aria-hidden', 'true');
+            marker.textContent = String(number);
+            marker.style.left = `${((photoRect.left + point[0] * photoRect.width) / photoRect.frameRect.width) * 100}%`;
+            marker.style.top = `${((photoRect.top + point[1] * photoRect.height) / photoRect.frameRect.height) * 100}%`;
+            this.frame.append(marker);
+        }
+
+        cancelManualDoorCapture(message = 'Marking cancelled.') {
+            this.manualDoorCapture = false;
+            this.manualDoorPoints = [];
+            this.frame.classList.remove('manual-door-marking');
+            this.clearManualDoorMarkers();
+            if (this.manualDoorMarkButton) {
+                this.manualDoorMarkButton.textContent = this.readManualDoorQuad() ? 'Adjust marked corners' : 'Mark doorway corners';
+                this.manualDoorMarkButton.setAttribute('aria-pressed', 'false');
+            }
+            if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = message;
+        }
+
+        beginManualDoorCapture() {
+            if (this.placementMode !== 'door') {
+                if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'Select a door product first, then mark its doorway.';
+                return;
+            }
+            this.manualDoorCapture = true;
+            this.manualDoorPoints = [];
+            this.clearManualDoorMarkers();
+            this.frame.classList.add('manual-door-marking');
+            if (this.manualDoorMarkButton) {
+                this.manualDoorMarkButton.textContent = 'Cancel marking';
+                this.manualDoorMarkButton.setAttribute('aria-pressed', 'true');
+            }
+            if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'Click the opening corners in order: top-left, top-right, bottom-right, then bottom-left.';
+        }
+
+        setupManualDoorPlacement() {
+            const controls = this.frame.closest('.comparison-panel')?.querySelector('[data-manual-door-placement]');
+            if (!controls) return;
+            this.manualDoorControls = controls;
+            this.manualDoorMarkButton = controls.querySelector('[data-manual-door-mark]');
+            this.manualDoorResetButton = controls.querySelector('[data-manual-door-reset]');
+            this.manualDoorInstructions = controls.querySelector('[data-manual-door-instructions]');
+
+            const savedQuad = this.readManualDoorQuad();
+            if (savedQuad) this.applyManualDoorQuad(savedQuad, { persist: false, render: false });
+
+            this.manualDoorMarkButton?.addEventListener('click', () => {
+                if (this.manualDoorCapture) this.cancelManualDoorCapture();
+                else this.beginManualDoorCapture();
+            });
+            this.manualDoorResetButton?.addEventListener('click', () => {
+                try { localStorage.removeItem(this.manualDoorStorageKey()); } catch (_) {}
+                this.cancelManualDoorCapture('Marked corners cleared. You can use automatic placement or mark the doorway again.');
+                this.frame.dataset.initialQuad = 'null';
+                this.frame.dataset.placementRenderable = 'false';
+                this.frame.dataset.placementSurface = 'opening';
+                this.frame.dataset.placementSource = 'placement-blocked';
+                this.frame.dataset.placementReason = '';
+                this.frame.dataset.placementScore = '0';
+                this.manualDoorResetButton.hidden = true;
+                this.manualDoorMarkButton.textContent = 'Mark doorway corners';
+                this.start();
+            });
+
+            this.frame.addEventListener('pointerdown', (event) => {
+                if (!this.manualDoorCapture || event.button !== 0) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                const photoRect = this.containedPhotoRect();
+                if (!photoRect) return;
+                const x = (event.clientX - photoRect.frameRect.left - photoRect.left) / photoRect.width;
+                const y = (event.clientY - photoRect.frameRect.top - photoRect.top) / photoRect.height;
+                if (x < 0 || x > 1 || y < 0 || y > 1) {
+                    if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'Click inside the room photo, not in the side margins.';
+                    return;
+                }
+                const point = [x, y];
+                this.manualDoorPoints.push(point);
+                this.addManualDoorMarker(point, this.manualDoorPoints.length, photoRect);
+                const corners = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+                if (this.manualDoorPoints.length < 4) {
+                    if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = `Marked ${this.manualDoorPoints.length} of 4. Click the ${corners[this.manualDoorPoints.length]} corner.`;
+                    return;
+                }
+                const quad = doorQuad(this.manualDoorPoints);
+                if (!quad) {
+                    this.manualDoorPoints = [];
+                    this.clearManualDoorMarkers();
+                    if (this.manualDoorInstructions) this.manualDoorInstructions.textContent = 'Those points do not form a valid doorway. Start again and click top-left, top-right, bottom-right, bottom-left.';
+                    return;
+                }
+                this.applyManualDoorQuad(quad);
+            }, true);
         }
 
         placementModeFromServer() {
@@ -290,8 +473,8 @@
             };
 
             if (mode === 'door') {
-                const quad = polygon(readJson({ textContent: this.frame.dataset.initialQuad || 'null' }, null));
-                if (quad.length !== 4) return null;
+                const quad = doorQuad(readJson({ textContent: this.frame.dataset.initialQuad || 'null' }, null));
+                if (!quad) return null;
                 placement.quad = quad;
                 placement.width = maxWidth;
                 placement.height = bounds(quad).maxY - bounds(quad).minY;
@@ -313,6 +496,7 @@
         }
 
         placementFitsPhoto(placement) {
+            if (placement.mode === 'door') return Boolean(doorQuad(placement.quad));
             const rect = {
                 left: placement.x - placement.width / 2,
                 right: placement.x + placement.width / 2,
@@ -363,12 +547,14 @@
 
         setupComparisonSlider() {
             if (!this.frame.classList.contains('room-comparison')) return;
+            if (this.frame.dataset.sliderReady) return;
+            this.frame.dataset.sliderReady = 'true';
 
             let dragging = false;
             const update = (clientX) => {
                 const bounds = this.frame.getBoundingClientRect();
                 if (!bounds.width) return;
-                const value = clamp(((clientX - bounds.left) / bounds.width) * 100, 2, 98);
+                const value = clamp(((clientX - bounds.left) / bounds.width) * 100, 0, 100);
                 const rounded = Math.round(value);
                 this.frame.style.setProperty('--split', `${value}%`);
                 this.frame.setAttribute('aria-valuenow', String(rounded));
@@ -392,16 +578,29 @@
             this.frame.addEventListener('pointerup', stopDragging);
             this.frame.addEventListener('pointercancel', stopDragging);
             this.frame.addEventListener('keydown', (event) => {
-                const current = Number(this.frame.getAttribute('aria-valuenow')) || 50;
+                const parsed = Number(this.frame.getAttribute('aria-valuenow'));
+                const current = Number.isFinite(parsed) ? parsed : 50;
                 let next = current;
                 if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next -= 4;
                 else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next += 4;
-                else if (event.key === 'Home') next = 2;
-                else if (event.key === 'End') next = 98;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = 100;
                 else return;
                 event.preventDefault();
-                update(this.frame.getBoundingClientRect().left + (clamp(next, 2, 98) / 100) * this.frame.getBoundingClientRect().width);
+                update(this.frame.getBoundingClientRect().left + (clamp(next, 0, 100) / 100) * this.frame.getBoundingClientRect().width);
             });
+        }
+
+        revealPlacement(placement) {
+            if (!this.frame.classList.contains('room-comparison')) return;
+            const frame = this.frame.getBoundingClientRect(), canvas = this.canvas.getBoundingClientRect();
+            const quad = placement.mode === 'door' ? placement.quad.map(([x,y])=>[x*this.canvas.width,y*this.canvas.height]) : furnitureQuad(placement,this.canvas.width,this.canvas.height);
+            const scale = Math.min(canvas.width / this.canvas.width, canvas.height / this.canvas.height);
+            const left = canvas.left + (canvas.width - this.canvas.width*scale)/2 + Math.min(...quad.map(([x])=>x))*scale;
+            const split = clamp((left-frame.left)/frame.width*100-4,0,50);
+            this.frame.style.setProperty('--split', `${split}%`);
+            this.frame.setAttribute('aria-valuenow', String(Math.round(split)));
+            this.frame.setAttribute('aria-valuetext', `${Math.round(split)}% before, ${100-Math.round(split)}% after`);
         }
 
         bboxPolygon(box) {
@@ -415,7 +614,7 @@
         regionPolygon(region) {
             if (!region || typeof region !== 'object') return [];
             const shape = polygon(region.polygon);
-            return shape.length >= 3 ? shape : this.bboxPolygon(region.bbox);
+            return shape.length >= 3 ? shape : doorQuad(region.door_fit_quad_percent) || this.bboxPolygon(region.bbox);
         }
 
 
@@ -453,8 +652,12 @@
             this.item.src = button.dataset.productImage || '';
             this.result = null;
             this.frame.dataset.finalPlacement = '';
+            this.visibleProductPixelCount = 0;
             this.itemType = `${this.frame.dataset.productType} ${this.frame.dataset.productCategory}`.toLowerCase();
             this.placementMode = this.placementModeFromServer() || this.placementModeFromType(this.itemType);
+            if (this.manualDoorControls) this.manualDoorControls.hidden = this.placementMode !== 'door';
+            const savedDoorQuad = this.placementMode === 'door' ? this.readManualDoorQuad() : null;
+            if (savedDoorQuad) this.applyManualDoorQuad(savedDoorQuad, { persist: false, render: false });
             this.warnings = [];
             this.initialConfidence = this.placementConfidenceFor(this.frame.dataset.placementConfidence);
             this.placementConfidence = this.initialConfidence;
@@ -478,6 +681,9 @@
         }
 
         async start(runId = ++this.runId) {
+            this.visibleProductPixelCount = 0;
+            if (this.guidance) this.guidance.textContent = '';
+            if (this.dimensions) this.dimensions.textContent = '';
             const enhancementRequested = this.retryAiPreview === true;
             this.retryAiPreview = false;
             this.result = null;
@@ -494,17 +700,34 @@
             if (this.room.complete && this.room.naturalWidth > 0) this.drawRoomOnly();
             this.setProgress('Preparing automatic 2D preview');
             try {
-                await Promise.all([this.room.decode(), this.item.decode()]);
+                await this.room.decode();
+                if (runId !== this.runId) return;
+                this.drawRoomOnly();
+                await this.item.decode();
                 if (runId !== this.runId) return;
             } catch (_) {
                 if (runId !== this.runId) return;
                 this.setProgress('');
-                this.setStatus('Room or furniture image could not be loaded. Upload another photo to try again.', '');
+                if (this.room.complete && this.room.naturalWidth > 0) this.drawRoomOnly();
+                this.setStatus(this.room.naturalWidth > 0 ? 'The selected catalog image could not be loaded. Choose another item or ask the shop to replace its photo.' : 'The saved room photo could not be loaded. Select another saved photo or upload it again.', 'low');
                 return;
             }
-            this.productRenderImage = this.rasterizeProductImage(this.item);
-            this.productImageBounds = this.visibleImageBounds(this.productRenderImage);
-            this.productCollisionCells = this.visibleProductCells();
+            if (/\/images\/furniture\/default\.svg(?:\?|$)/.test(this.item.src || '')) {
+                this.setProgress('');
+                this.setStatus('This catalog item needs a product photo before it can be previewed.', 'low');
+                return;
+            }
+            try {
+                this.productRenderImage = this.rasterizeProductImage(this.item);
+                this.productImageBounds = this.visibleImageBounds(this.productRenderImage);
+                if (!this.productImageBounds) throw new Error('transparent');
+                this.productCollisionCells = this.visibleProductCells();
+            } catch (_) {
+                this.drawRoomOnly(); this.setProgress('');
+                this.setStatus('The selected catalog image has no usable visible pixels.', 'low');
+                if (this.guidance) this.guidance.textContent = 'Ask the shop to replace this image with a clear product photo or genuine cutout. Your original room is shown.';
+                return;
+            }
             const dims = this.dimensionsFromCatalog();
             if (!dims) {
                 this.drawRoomOnly();
@@ -541,7 +764,10 @@
                 } else if (this.placementMode === 'door') {
                     const unavailable = this.analysis.gemini_used === false;
                     this.setStatus(unavailable ? 'Doorway analysis unavailable' : 'No confirmed doorway available', 'low');
-                    if (this.guidance) this.guidance.textContent = unavailable
+                    const detected = this.openings.some(item => /door|entry|entrance|archway|closet|passage/i.test(`${item.type || ''} ${item.label || ''}`) && !/window/i.test(`${item.type || ''} ${item.label || ''}`));
+                    if (this.guidance) this.guidance.textContent = detected
+                        ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Reuse this saved photo and choose Re-analyze room; a bounding box alone cannot position the door.'
+                        : unavailable
                         ? 'The room analysis did not return doorway corners. This does not mean the doorway frame is missing from your photo. Re-analyze this saved photo when AI analysis is available.'
                         : 'A complete doorway placement was not confirmed, so this door has not been placed. Use a photo showing the full frame from top to floor, then re-analyze when AI is available.';
                 } else {
@@ -550,8 +776,16 @@
                 }
                 return;
             }
+            try {
+                if (this.draw(placement, dims) === false) throw new Error('no product pixels');
+            } catch (_) {
+                this.drawRoomOnly(); this.setProgress('');
+                this.setStatus('The selected furniture could not be drawn visibly.', 'low');
+                if (this.guidance) this.guidance.textContent = 'Your original room is shown. Choose another item or ask the shop to replace its catalog image.';
+                return;
+            }
             this.result = placement;
-            this.draw(placement, dims);
+            this.revealPlacement?.(placement);
             this.report(placement);
             this.frame.dataset.finalPlacement = JSON.stringify(placement);
             if (this.download) { this.download.disabled = false; this.download.onclick = () => this.downloadPng(); }
@@ -775,9 +1009,9 @@
             const productAspect = dims?.width > 0 && dims?.height > 0 ? dims.width / dims.height : null;
             const candidates = this.openings.map((item, index) => {
                 const label = `${item.type || ''} ${item.label || ''}`.toLowerCase();
-                const quad = polygon(item.door_fit_quad_percent);
+                const quad = doorQuad(item.door_fit_quad_percent);
                 if (!/door|doorway|entry|entrance|archway|closet|passage/.test(label)
-                    || /window|skylight|transom/.test(label) || quad.length !== 4) return null;
+                    || /window|skylight|transom/.test(label) || item.frame_complete === false || !quad) return null;
 
                 const box = bounds(quad);
                 const imageAspect = (box.maxX - box.minX) * (this.room?.naturalWidth || 1)
@@ -798,15 +1032,17 @@
         autoFit(dims) {
             const naturalAspect = this.productImageAspect();
             if (this.frame.dataset.placementRenderable !== undefined) {
+                if (this.frame.dataset.placementRenderable === 'false'
+                    && this.frame.dataset.placementSource === 'placement-blocked') return null;
                 const serverPlacement = this.serverPlacement(dims, naturalAspect);
                 if (serverPlacement && this.placementFitsPhoto(serverPlacement)) return serverPlacement;
-                if (this.placementMode === 'door' && this.frame.dataset.placementRenderable === 'false') return null;
+                if (this.placementMode === 'door' && this.frame.dataset.placementRenderable === 'false' && !this.openingForDoor(dims)) return null;
                 this.warnings.push('The suggested placement did not fit the detected room area, so FurniCraft checked another photo-based position.');
             }
             if (this.placementMode === 'door') {
                 const opening = this.openingForDoor(dims);
                 if (opening) {
-                    const quad = polygon(opening.door_fit_quad_percent);
+                    const quad = doorQuad(opening.door_fit_quad_percent);
                     const box = bounds(quad);
                     return { mode: 'door', quad, x: (box.minX + box.maxX) / 2, y: box.maxY, width: box.maxX - box.minX, scale: 1, score: 0.8 };
                 }
@@ -963,16 +1199,14 @@
 
         draw(placement, dims) {
             const size = this.canvasSize();
-            if (!size) return;
-            const ctx = this.context;
+            if (!size) return false;
             const { width, height } = size;
-            ctx.clearRect(0, 0, width, height);
-            ctx.drawImage(this.room, 0, 0, width, height);
-            if (!this.dimensionsFromCatalog()) return;
+            const layer = document.createElement('canvas'); layer.width = width; layer.height = height;
+            const ctx = layer.getContext('2d', {willReadFrequently:true});
+            if (!this.dimensionsFromCatalog() || !ctx) return false;
             const rendered = this.litProduct(placement.flip === true);
             const itemWidth = placement.width * width;
             const itemHeight = placement.height * height;
-            this.drawContactShadows(placement, itemWidth, itemHeight, width, height);
             if (placement.mode === 'door' && placement.quad?.length === 4) {
                 this.drawQuad(ctx, rendered, placement.quad.map(([qx, qy]) => [qx * width, qy * height]), this.productImageBounds, placement.flip === true);
             } else {
@@ -985,14 +1219,25 @@
                 if (Math.abs(Number(placement.perspectiveDeg) || 0) > 1e-9) {
                     this.drawQuad(ctx, rendered, quad, crop, flip === -1);
                     ctx.restore();
-                    return;
-                }
+                } else {
                 ctx.transform(quad[1][0]-quad[0][0], quad[1][1]-quad[0][1],
                     quad[3][0]-quad[0][0], quad[3][1]-quad[0][1], quad[0][0], quad[0][1]);
                 if (flip === -1) { ctx.translate(1, 0); ctx.scale(-1, 1); }
                 ctx.drawImage(rendered, crop.x, crop.y, crop.width, crop.height, 0, 0, 1, 1);
                 ctx.restore();
+                }
             }
+            // Validate only the product layer. Room pixels and contact shadows cannot pass this gate.
+            const pixels = ctx.getImageData(0, 0, width, height).data;
+            let visible = 0;
+            for (let i=3;i<pixels.length;i+=4) if (pixels[i]>=16) visible++;
+            if (visible < 4) return false;
+            this.visibleProductPixelCount = visible;
+            this.context.clearRect(0, 0, width, height);
+            this.context.drawImage(this.room, 0, 0, width, height);
+            this.drawContactShadows(placement, itemWidth, itemHeight, width, height);
+            this.context.drawImage(layer, 0, 0);
+            return true;
         }
 
         drawQuad(ctx, image, quad, crop = null, flip = false) {
@@ -1083,6 +1328,11 @@
                 bufferContext.drawImage(this.room, 0, 0, width, height);
                 bufferContext.drawImage(generated, 0, 0, width, height);
                 this.context.drawImage(buffer, 0, 0, width, height);
+                if (this.frame.classList.contains('room-comparison')) {
+                    this.frame.style.setProperty('--split', '0%');
+                    this.frame.setAttribute('aria-valuenow', '0');
+                    this.frame.setAttribute('aria-valuetext', '0% before, 100% after');
+                }
                 this.result = {
                     mode: 'generated-image', source: 'ai-generated', productId,
                     aiVisualCheckPassed: true, physicalFitConfirmed: false,
@@ -1126,11 +1376,17 @@
             this.report(original);
         }
         hardValid(place, dims) {
-            if (place.mode === 'door') return Boolean(place.quad?.length === 4 && place.quad.flat().every((v) => v >= 0.02 && v <= 0.98));
+            if (place.mode === 'door') return Boolean(doorQuad(place.quad));
             return Boolean(dims.width && dims.depth && dims.height) && this.placementFitsPhoto(place);
         }
 
         report(place) {
+            if (place?.source === 'manual-door') {
+                this.setStatus('Manual doorway placement · rough estimate', 'low');
+                if (this.guidance) this.guidance.textContent = 'The door follows the four corners you marked. This is a visual estimate, not a measurement; confirm the opening and product dimensions with the shop.';
+                if (this.detections) this.detections.innerHTML = '<span class="preview-badge is-rough">Manually marked doorway</span><span class="preview-badge is-rough">Rough estimate</span>';
+                return;
+            }
             if (place?.mode === 'generated-image') {
                 this.setStatus('AI visual preview ready', 'low');
                 if (this.guidance) this.guidance.textContent = 'The preview was generated from your room photo and the selected catalog item and passed the AI visual check. Its apparent size and placement remain a visual estimate; physical fit is not confirmed.';
@@ -1164,8 +1420,10 @@
         }
 
         downloadPng() {
+            if (!this.result) return;
+            const runId = this.runId;
             this.canvas.toBlob((blob) => {
-                if (!blob) return;
+                if (!blob || runId !== this.runId || !this.result) return;
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
@@ -1202,5 +1460,5 @@
         });
     });
     window.RoomPreviewEngine = RoomPreviewEngine;
-    window.RoomPreviewEngineTest = { pointInPolygon, polygonArea, bounds, rectanglesOverlap, polygonIntersectsRect, polygonInsidePolygon, weightedMedian, imageContentBounds, confidenceScore, detectedFloorPolygon, alphaContactRegions, furnitureQuad, projectQuad, lightingProfile, lightingColor };
+    window.RoomPreviewEngineTest = { doorQuad, pointInPolygon, polygonArea, bounds, rectanglesOverlap, polygonIntersectsRect, polygonInsidePolygon, weightedMedian, imageContentBounds, confidenceScore, detectedFloorPolygon, alphaContactRegions, furnitureQuad, projectQuad, lightingProfile, lightingColor };
 })();

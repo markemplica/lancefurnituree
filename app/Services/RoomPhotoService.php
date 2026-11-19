@@ -48,8 +48,7 @@ class RoomPhotoService
             return $bytes;
         }
 
-        $metadata = @exif_read_data($file->getPathname());
-        $orientation = (int) ($metadata['Orientation'] ?? 1);
+        $orientation = RoomImageOrientation::read($bytes);
         if ($orientation < 2 || $orientation > 8) {
             return $bytes;
         }
@@ -58,22 +57,7 @@ class RoomPhotoService
         if (! $image) {
             return $bytes;
         }
-        if (in_array($orientation, [2, 5, 7], true)) {
-            imageflip($image, IMG_FLIP_HORIZONTAL);
-        }
-        $rotation = match ($orientation) {
-            3, 4 => 180,
-            5, 6 => -90,
-            7, 8 => 90,
-            default => 0,
-        };
-        if ($rotation !== 0) {
-            $rotated = imagerotate($image, $rotation, 0);
-            if ($rotated) {
-                imagedestroy($image);
-                $image = $rotated;
-            }
-        }
+        $image = RoomImageOrientation::apply($image, $bytes);
         ob_start();
         imagejpeg($image, null, 90);
         $normalized = (string) ob_get_clean();

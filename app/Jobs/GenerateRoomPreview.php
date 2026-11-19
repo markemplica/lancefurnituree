@@ -17,6 +17,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Throwable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Context;
 
 class GenerateRoomPreview implements ShouldQueue, ShouldBeUnique
 {
@@ -48,18 +49,24 @@ class GenerateRoomPreview implements ShouldQueue, ShouldBeUnique
             ->where('furniture_product_id', $this->productId)->first();
 
         if (! $room || ! $product || ! $generation) return;
+        if (filled($generation->cache_key)) return; // A legacy delivery never owns a v2 attempt.
         if (! in_array($generation->status, ['queued', 'retrying'], true)) return;
 
 
-        if (! $room->gemini_consent_at) {
+        if (! \App\Services\AiProvider::hasPhotoConsent($room)) {
             $generation->update(['status' => 'cancelled', 'message' => 'AI processing is disabled for this photo.']);
             return;
         }
 
-        $generation->update(['status' => 'processing', 'attempts' => $generation->attempts + 1, 'message' => null]);
+        if (RoomPreviewGeneration::whereKey($generation->id)->whereNull('cache_key')->whereIn('status', ['queued', 'retrying'])
+            ->update(['status' => 'processing', 'attempts' => DB::raw('attempts + 1'), 'message' => null]) !== 1) return;
+        $previousAction = Context::getHidden('ai_action_key');
+        $previousActor = Context::getHidden('ai_user_id');
 
         try {
-            $audit->record('room_photo_sent_to_gemini', 'room_image', $room->id, ['purpose' => 'furnished_preview'], $room->user_id);
+            Context::addHidden('ai_action_key', 'legacy-preview:'.$generation->id.':'.$generation->created_at?->toISOString());
+            Context::addHidden('ai_user_id', $room->user_id);
+            Context::addHidden('ai_photo_transfer', ['room_id'=>$room->id,'user_id'=>$room->user_id,'purpose'=>'furnished_preview']);
             $result = $gemini->furnishRoom($room->image_path, $product, true);
 
             if (! $result['used'] || ! filled($result['bytes'] ?? null)) {
@@ -102,6 +109,10 @@ class GenerateRoomPreview implements ShouldQueue, ShouldBeUnique
                     : 'Gemini could not create the image. The local 2D placement preview is shown instead.',
             ]);
             throw $exception;
+        } finally {
+            Context::forgetHidden('ai_photo_transfer');
+            $previousAction === null ? Context::forgetHidden('ai_action_key') : Context::addHidden('ai_action_key', $previousAction);
+            $previousActor === null ? Context::forgetHidden('ai_user_id') : Context::addHidden('ai_user_id', $previousActor);
         }
     }
 
@@ -109,6 +120,7 @@ class GenerateRoomPreview implements ShouldQueue, ShouldBeUnique
     {
         RoomPreviewGeneration::where('room_image_id', $this->roomImageId)
             ->where('furniture_product_id', $this->productId)
+            ->whereNull('cache_key')->whereIn('status', ['queued','processing','retrying'])
             ->update(['status' => 'failed', 'message' => 'Gemini could not create the image. The local 2D placement preview is shown instead.']);
     }
 }

@@ -960,7 +960,7 @@ class ExampleTest extends TestCase
         $placement = app(FurniturePlacementService::class)->forProduct($analysis, $door);
 
         $this->assertFalse($placement['renderable']);
-        $this->assertSame('no-opening', $placement['validation_status']);
+        $this->assertSame('missing-door-corners', $placement['validation_status']);
         $this->assertSame('placement-blocked', $placement['source']);
     }
 
@@ -1108,7 +1108,11 @@ class ExampleTest extends TestCase
                     'placement_confidence' => 'high',
                     'placement_reason' => 'Detected right doorway.',
                     'openings' => [['label' => 'right doorway', 'polygon' => [[76, 28], [91, 30], [92, 91], [75, 90]], 'door_fit_quad_percent' => [[76, 28], [91, 30], [92, 91], [75, 90]]]],
-                    'candidate_zones' => [],
+                    'candidate_zones' => [[
+                        'surface' => 'floor', 'anchor_x_percent' => 52, 'anchor_y_percent' => 87, 'max_width_percent' => 48,
+                        'suitable_types' => ['chair', 'storage', 'bed', 'living set', 'dining', 'table', 'seating'],
+                        'clearance_score' => 85, 'occlusion_score' => 8, 'confidence' => 'medium', 'reason' => 'Clear floor zone.',
+                    ]],
                     'scene_confidence' => 'high',
                 ])]]],
             ]],
@@ -1145,10 +1149,10 @@ class ExampleTest extends TestCase
 
         $placement = app(FurniturePlacementService::class)->forProduct([], $product);
 
-        $this->assertEquals(70.0, $placement['x_percent']);
-        $this->assertSame('type-fallback', $placement['source']);
-        $this->assertFalse($placement['needs_confirmation']);
-        $this->assertSame('advisory', $placement['validation_status']);
+        $this->assertFalse($placement['renderable']);
+        $this->assertSame('placement-blocked', $placement['source']);
+        $this->assertTrue($placement['needs_confirmation']);
+        $this->assertSame('placement-geometry-missing', $placement['validation_status']);
     }
 
     public function test_door_without_a_detected_opening_is_not_shown_at_an_invented_position(): void

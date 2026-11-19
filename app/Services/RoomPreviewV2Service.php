@@ -18,11 +18,12 @@ use Throwable;
 class RoomPreviewV2Service
 {
     // Include local rendering changes so newly requested artifacts do not reuse old shadows.
-    public const PLACEMENT_VERSION = 'photo-2d-placement-v5-lighting-v1';
+    public const PLACEMENT_VERSION = 'photo-2d-placement-v6-visible-door-corners';
 
     private int $providerCallStart = 0;
 
     private int $previousProviderCalls = 0;
+    private int $generationId = 0;
 
     public function __construct(
         private GeminiService $gemini,
@@ -33,13 +34,15 @@ class RoomPreviewV2Service
         private PrivacyAudit $audit,
     ) {}
 
-    public function process(int $generationId, ?string $expectedCacheKey = null): void
+    public function process(int $generationId, ?string $expectedCacheKey = null, ?string $expectedToken = null): void
     {
         $started = hrtime(true);
+        $this->generationId = $generationId;
         $this->providerCallStart = $this->gemini->providerCallCount();
         $generation = RoomPreviewGeneration::find($generationId);
-        if (! $generation || in_array($generation->status, ['completed', 'fallback', 'failed', 'cancelled'], true)
-            || ($expectedCacheKey !== null && $generation->cache_key !== $expectedCacheKey)) {
+        if (! $generation || $generation->status !== 'queued'
+            || ($expectedCacheKey !== null && $generation->cache_key !== $expectedCacheKey)
+            || ($expectedToken !== null && $generation->attempt_token !== $expectedToken)) {
             return;
         }
         $room = RoomImage::find($generation->room_image_id);
@@ -54,16 +57,26 @@ class RoomPreviewV2Service
 
             return;
         }
+        if ($generation->attempt_token && ! hash_equals($generation->cache_key, RoomPreviewIdentity::key($room, $product))) {
+            $this->finish($generation, 'cancelled', 'preview_inputs_changed', 'The photo analysis or catalog item changed. Use the current local preview.');
+            return;
+        }
 
-        $generation->update(['status' => 'processing', 'attempts' => (int) $generation->attempts + 1, 'failure_code' => null, 'message' => null]);
-        $this->previousProviderCalls = (int) data_get($generation->metrics_json, 'provider_calls', 0);
-        $this->gemini->limitProviderRequests(max(0, min(2, (int) config('roompreview.max_provider_calls', 8)) - $this->previousProviderCalls));
+        if (RoomPreviewGeneration::whereKey($generation->id)->where('status', 'queued')
+            ->where('cache_key', $generation->cache_key)->where('attempt_token', $generation->attempt_token)
+            ->update(['status' => 'processing', 'attempts' => DB::raw('attempts + 1'), 'failure_code' => null, 'message' => null]) !== 1) return;
+        $generation->refresh();
+        $this->previousProviderCalls = max((int) data_get($generation->metrics_json, 'provider_calls', 0),
+            DB::table('ai_action_attempts')->where('action_key', 'like', 'preview-v2:'.$generation->id.':%')->count());
+        $this->gemini->limitProviderRequests(max(0, min(2, (int) config('roompreview.max_provider_calls', 8) - $this->previousProviderCalls)));
         $providerCalls = 0;
         $tempPath = null;
         $previousActor = Context::getHidden('ai_user_id');
+        $previousAction = Context::getHidden('ai_action_key');
 
         try {
             Context::addHidden('ai_user_id', $room->user_id);
+            Context::addHidden('ai_action_key', 'preview-v2:'.$generation->id.':'.($generation->attempt_token ?? $generation->cache_key));
             $source = $this->photos->get($room->image_path);
             if (strlen($source) > (int) config('roompreview.max_upload_bytes')) {
                 throw new \RuntimeException('image_too_large');
@@ -108,7 +121,11 @@ class RoomPreviewV2Service
             $aiFailureCode = $analysisFailure;
             $verification = null;
             $guard = null;
-            if (! $analysisFailure && config('services.gemini.image_enabled') && AiProvider::name() === 'gemini' && $room->gemini_consent_at && $this->gemini->isConfigured()) {
+            if (! $localArtifact) {
+                $this->savePlacementFallback($generation, $placement, $confidence, $label, $this->raster->available() ? 'preview_composite_unavailable' : 'gd_extension_missing', $started, $providerCalls);
+                return;
+            }
+            if (! $analysisFailure && config('roompreview.use_v2_pipeline') && config('services.gemini.image_enabled') && AiProvider::name() === 'gemini' && $room->gemini_consent_at && $this->gemini->isConfigured()) {
                 for ($attempt = 0; $attempt < min(1, (int) config('roompreview.max_generation_attempts', 1)); $attempt++) {
                     if (! $this->hasConsent($room->id)) {
                         break;
@@ -116,7 +133,7 @@ class RoomPreviewV2Service
                     \Illuminate\Support\Facades\Context::addHidden('ai_photo_transfer', ['room_id' => $room->id, 'purpose' => 'room_preview_v2_generation', 'user_id' => $room->user_id]);
                     try {
                         $generated = $this->gemini->furnishRoom($tempPath, $product, true, 1, 0, $placement);
-                    } catch (AiRequestBudgetExceeded|ConnectionException|RequestException $exception) {
+                    } catch (Throwable $exception) {
                         $httpStatus = $exception instanceof RequestException ? $exception->response->status() : null;
                         $aiFailureCode = $this->failureCode($exception, 'ai_generation_unavailable');
                         Log::warning('AI preview generation unavailable; using local estimate', [
@@ -133,10 +150,20 @@ class RoomPreviewV2Service
                     if (! $this->hasConsent($room->id)) {
                         continue;
                     }
+                    if ($generation->attempt_token && ! hash_equals($generation->cache_key, RoomPreviewIdentity::key($room->fresh(), $product->fresh()))) {
+                        $aiFailureCode = 'preview_inputs_changed';
+                        break;
+                    }
+                    $bounds = $localArtifact['guard_bounds'] ?? $localArtifact['bounds'] ?? $this->expectedBounds($placement, $product, $normalized['width'], $normalized['height']);
+                    $guard = $this->raster->pixelGuard($normalized['bytes'], $generated['bytes'], $bounds);
+                    if (! ($guard['supported'] ?? false) || ! ($guard['passed'] ?? false)) {
+                        $aiFailureCode = 'generated_image_failed_local_checks';
+                        break;
+                    }
                     \Illuminate\Support\Facades\Context::addHidden('ai_photo_transfer', ['room_id' => $room->id, 'purpose' => 'room_preview_v2_verification', 'user_id' => $room->user_id]);
                     try {
                         $verification = $this->gemini->verifyGeneratedRoom($tempPath, $generated['bytes'], $product, 1);
-                    } catch (AiRequestBudgetExceeded|ConnectionException|RequestException $exception) {
+                    } catch (Throwable $exception) {
                         $httpStatus = $exception instanceof RequestException ? $exception->response->status() : null;
                         $aiFailureCode = $this->failureCode($exception, 'ai_verification_unavailable');
                         Log::warning('AI preview verification unavailable; using local estimate', [
@@ -147,8 +174,6 @@ class RoomPreviewV2Service
                         break;
                     }
                     $providerCalls += 1;
-                    $bounds = $localArtifact['guard_bounds'] ?? $localArtifact['bounds'] ?? $this->expectedBounds($placement, $product, $normalized['width'], $normalized['height']);
-                    $guard = $this->raster->pixelGuard($normalized['bytes'], $generated['bytes'], $bounds);
                     if (($verification['passed'] ?? false) && ($guard['supported'] ?? false) && ($guard['passed'] ?? false)) {
                         $artifact = ['bytes' => $generated['bytes'], 'mime' => $generated['mime_type'] ?? 'image/png'];
                         $verifiedByAi = true;
@@ -194,11 +219,15 @@ class RoomPreviewV2Service
                 $currentRoom = RoomImage::whereKey($room->id)->lockForUpdate()->first();
                 $currentGeneration = RoomPreviewGeneration::whereKey($generation->id)->lockForUpdate()->first();
                 if (! $currentRoom || ! $currentGeneration || $currentGeneration->status === 'cancelled'
-                    || $currentGeneration->cache_key !== $generation->cache_key) {
+                    || $currentGeneration->cache_key !== $generation->cache_key || $currentGeneration->attempt_token !== $generation->attempt_token) {
                     return;
                 }
                 if ($currentRoom->gemini_consent_at != $room->gemini_consent_at) {
                     throw new \RuntimeException('consent_revoked');
+                }
+                if ($generation->attempt_token && ! hash_equals($generation->cache_key, RoomPreviewIdentity::key($currentRoom, FurnitureProduct::findOrFail($generation->furniture_product_id)))) {
+                    $this->finish($generation, 'cancelled', 'preview_inputs_changed', 'The photo analysis or catalog item changed. Your current local preview remains available.');
+                    return;
                 }
                 $this->photos->storeGenerated($path, $artifact['bytes']);
                 $fallbackMessage = match ($aiFailureCode) {
@@ -226,6 +255,7 @@ class RoomPreviewV2Service
             throw $exception;
         } finally {
             Context::forgetHidden('ai_photo_transfer');
+            $previousAction === null ? Context::forgetHidden('ai_action_key') : Context::addHidden('ai_action_key', $previousAction);
             $previousActor === null ? Context::forgetHidden('ai_user_id') : Context::addHidden('ai_user_id', $previousActor);
             $this->gemini->clearProviderRequestLimit();
             if ($tempPath) {
@@ -296,6 +326,8 @@ class RoomPreviewV2Service
         $message = match ($failureCode) {
             'no_safe_placement' => ($placement['reason'] ?? 'No clear furniture placement was detected.').' Try a clearer photo showing the floor or opening.',
             'photo_quality_low' => 'This photo is too dark, bright, or blurred for a reliable preview. Upload a clear photo showing the usable floor or opening.',
+            'preview_composite_unavailable' => 'The catalog image could not produce visible product pixels. Your browser preview is retained if available; ask the shop for a clear product photo or genuine cutout.',
+            'gd_extension_missing' => 'Server image rendering is unavailable. Your normal browser 2D preview remains available; no paid enhancement was started.',
             default => 'Only a placement estimate is available; image rendering is not available on this server.',
         };
         $this->finish($generation, 'fallback', $failureCode, $message, $data, $confidence, $label, $this->metrics($started, $calls, null, null, null));
@@ -305,7 +337,7 @@ class RoomPreviewV2Service
     {
         $saved = DB::transaction(function () use ($generation, $status, $failureCode, $message, $data, $confidence, $label, $metrics): bool {
             $current = RoomPreviewGeneration::whereKey($generation->id)->lockForUpdate()->first();
-            if (! $current || $current->status === 'cancelled' || $current->cache_key !== $generation->cache_key) {
+            if (! $current || $current->status === 'cancelled' || $current->cache_key !== $generation->cache_key || $current->attempt_token !== $generation->attempt_token) {
                 return false;
             }
             $current->update([
@@ -325,7 +357,8 @@ class RoomPreviewV2Service
     {
         return [
             'elapsed_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
-            'provider_calls' => $this->previousProviderCalls + max(0, $this->gemini->providerCallCount() - $this->providerCallStart),
+            'provider_calls' => max(DB::table('ai_action_attempts')->where('action_key', 'like', 'preview-v2:'.$this->generationId.':%')->count(),
+                $this->previousProviderCalls + max(0, $this->gemini->providerCallCount() - $this->providerCallStart)),
             'gd_available' => $this->raster->available(),
             'quality_usable' => $quality['usable'] ?? null,
             'verification_passed' => $verification['passed'] ?? null,

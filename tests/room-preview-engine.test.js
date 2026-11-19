@@ -7,6 +7,33 @@ globalThis.document = { addEventListener() {} };
 await import('../public/js/room-preview-engine.js');
 
 const geometry = globalThis.RoomPreviewEngineTest;
+test('door fitting uses the same strict room-facing corner contract as the server', () => {
+    const cases=JSON.parse(readFileSync(new URL('./Fixtures/doorway-fit-quads.json',import.meta.url),'utf8'));
+    for(const sample of cases) assert.equal(Boolean(geometry.doorQuad(sample.quad)),sample.valid,sample.name);
+});
+test('an alpha-empty image has no usable crop or invented product bounds', () => {
+    assert.equal(geometry.imageContentBounds(new Uint8ClampedArray(16),2,2),null);
+});
+test('an undrawable product never reports success, enables export, or starts paid work', async () => {
+    const engine=startingEngine(); engine.retryAiPreview=true; engine.draw=()=>false;
+    let reported=0; engine.report=()=>reported++;
+    await engine.start();
+    assert.equal(engine.result,null); assert.equal(engine.download.disabled,true);
+    assert.equal(engine.frame.dataset.finalPlacement,''); assert.equal(reported,0);
+    assert.equal(engine.enhancedCalls+engine.verificationCalls,0);
+});
+test('a late legacy visual check cannot overwrite the current product result', async () => {
+    const previous=globalThis.fetch; let complete;
+    globalThis.fetch=()=>new Promise(resolve=>{complete=resolve;});
+    const engine=startingEngine(); const old={mode:'floor',x:.2}; const current={mode:'floor',x:.8};
+    engine.result=old; engine.canvas.toDataURL=()=> 'data:image/jpeg;base64,AAAA';
+    engine.frame.dataset.verifyUrl='/check'; engine.verifyLoop=RoomPreviewEngine.prototype.verifyLoop;
+    try {
+        const pending=engine.verifyLoop({},0); engine.runId++; engine.result=current;
+        complete({ok:true,json:async()=>({valid:true,verdict:'good',realism_score:.9})}); await pending;
+        assert.equal(engine.result,current); assert.equal(engine.verificationScore,undefined);
+    } finally {globalThis.fetch=previous;}
+});
 test('one optional visual check never follows corrections with additional paid requests', async () => {
     const previous=globalThis.fetch; let calls=0;
     globalThis.fetch=async()=>{calls++;return {ok:true,json:async()=>({valid:true,verdict:'needs_adjustment',realism_score:.4,corrections:{dx:.01,scale_factor:.95}})};};
@@ -80,7 +107,11 @@ test('furniture draws at full opacity while retaining its original cutout', () =
         dimensionsFromCatalog: () => true,
         drawContactShadows() {},
     });
-    engine.draw({mode: 'floor', x: .5, y: .8, width: .2, height: .4});
+    const previous = document.createElement;
+    const layerContext = {...engine.context, getImageData: () => ({data: new Uint8ClampedArray(200*200*4).fill(255)})};
+    document.createElement = () => ({getContext: () => layerContext});
+    try { assert.equal(engine.draw({mode: 'floor', x: .5, y: .8, width: .2, height: .4}), true); }
+    finally { document.createElement = previous; }
     const furniture = calls.find((call) => call.image === item);
     assert.equal(furniture.alpha, 1, 'solid source pixels must hide the room behind them');
     assert.deepEqual(furniture.args.slice(0, 4), [0, 0, 20, 40], 'draw the original alpha cutout');
@@ -246,19 +277,18 @@ test('browser preview searches the actual photo floor when the server position i
     assert.ok(engine.placementFitsPhoto(placement));
 });
 
-test('browser preview locally fits floor furniture when no server placement was validated', () => {
+test('browser preview keeps furniture unplaced when server geometry is blocked', () => {
     const engine = photoEngine();
     engine.analysis = {};
     engine.vision = {};
     Object.assign(engine.frame.dataset, {
         initialX: '50', initialY: '86', initialWidth: '30', initialQuad: 'null',
-        placementRenderable: 'false', placementSurface: 'floor', placementSource: 'type-fallback',
+        placementRenderable: 'false', placementSurface: 'floor', placementSource: 'placement-blocked',
     });
 
     const placement = engine.autoFit({width: 140, depth: 80, height: 75});
 
-    assert.ok(placement, 'floor furniture should still use local photo-based fitting when server geometry is unavailable');
-    assert.ok(engine.placementFitsPhoto(placement));
+    assert.equal(placement, null, 'the browser must not invent a placement after the server rejects the geometry');
 });
 
 test('browser preview does not invent a placement when the server marks it unavailable', () => {
@@ -454,7 +484,8 @@ test('existing furniture protects both its floor footprint and visible upper bod
 function startingEngine(v2Enabled = true) {
     const engine = Object.create(globalThis.RoomPreviewEngine.prototype);
     Object.assign(engine, {
-        frame: {dataset: {consented: 'true', placementStatus: 'completed', previewV2Url: '/preview-v2', previewV2Enabled: String(v2Enabled), verifyUrl: '/verify'}},
+        frame: {classList: {contains: () => false}, dataset: {consented: 'true', placementStatus: 'completed', previewV2Url: '/preview-v2', previewV2Enabled: String(v2Enabled), verifyUrl: '/verify'}},
+        openings: [],
         canvas: {}, context: {},
         room: {decode: async () => {}}, item: {decode: async () => {}},
         initialConfidence: 0.8, analysis: {gemini_used: true}, floorDetected: true,

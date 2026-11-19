@@ -46,7 +46,7 @@
         </div>
 
         <div class="col-lg-7 planner-photo-library">
-            <button type="button" class="planner-library-button" data-open-room-library>Your saved room photos</button>
+            <button type="button" class="planner-library-button" data-open-room-library>View your saved room</button>
         <dialog class="planner-room-dialog" data-room-library aria-labelledby="room-library-heading">
             <h2 id="room-library-heading">Your saved room photos</h2>
             <p class="small text-muted" data-room-selection-status aria-live="polite">Choose a room photo, then press OK to use it.</p>
@@ -82,7 +82,12 @@
         @csrf
         <div class="alert fc-alert mb-4" role="status" aria-live="polite" data-preferences-status hidden></div>
         <div class="row g-3 planner-preference-fields">
-            <div class="col-md-4"><label class="form-label" for="furniture_type">Furniture type</label><select class="form-select" id="furniture_type" name="furniture_type" required><option value="">Choose furniture</option>@foreach($furnitureTypes as $type)<option value="{{ $type }}" @selected(old('furniture_type',$preference?->furniture_type)===$type)>{{ $type }}</option>@endforeach</select><div class="form-text">Recommendations will only include this type.</div></div>
+            <div class="col-md-4"><label class="form-label" for="furniture_type">Furniture type</label><select class="form-select" id="furniture_type" name="furniture_type" required><option value="">Choose furniture</option>
+                @if(filled($preference?->furniture_type) && !$furnitureTypes->contains($preference->furniture_type))
+                    <option value="{{ $preference->furniture_type }}" @selected(old('furniture_type',$preference->furniture_type)===$preference->furniture_type)>{{ $preference->furniture_type }} (saved selection)</option>
+                @endif
+                @foreach($furnitureTypes as $type)<option value="{{ $type }}" @selected(old('furniture_type',$preference?->furniture_type)===$type)>{{ $type }}</option>@endforeach
+            </select><div class="form-text">Recommendations will only include this category.</div></div>
             <?php
                 $budgetRanges = [];
                 for ($upper = 10000; $upper <= 100000; $upper += 10000) {
@@ -101,9 +106,19 @@
                 }
             ?>
             <div class="col-md-8"><label class="form-label" for="budget_range">Budget range</label><select class="form-select" id="budget_range" name="budget_range" required><option value="">Choose your budget</option>@foreach($budgetRanges as $value => $label)<option value="{{ $value }}" @selected($selectedBudget === $value)>{{ $label }}</option>@endforeach</select><div class="form-text">Preset budgets start at PHP 1,000.00.</div></div>
-            <div class="col-md-4"><label class="form-label" for="style">Furniture style</label><select class="form-select" id="style" name="style"><option value="">Open to any style</option>@foreach($styles as $style)<option @selected(old('style',$preference?->style)===$style)>{{ $style }}</option>@endforeach</select></div>
-            <div class="col-md-4"><label class="form-label" for="wood_type">Wood type</label><select class="form-select" id="wood_type" name="wood_type"><option value="">Either wood</option>@foreach($woodTypes as $value)<option @selected(old('wood_type',$preference?->wood_type)===$value)>{{ $value }}</option>@endforeach</select></div>
-            <div class="col-md-4"><label class="form-label" for="varnish_finish">Varnish finish</label><select class="form-select" id="varnish_finish" name="varnish_finish"><option value="">Any finish</option>@foreach($varnishFinishes as $value)<option @selected(old('varnish_finish',$preference?->varnish_finish)===$value)>{{ $value }}</option>@endforeach</select></div>
+            @foreach([
+                ['field' => 'style', 'label' => 'Furniture style', 'any' => 'Open to any style', 'values' => $styles],
+                ['field' => 'wood_type', 'label' => 'Wood type', 'any' => 'Any wood', 'values' => $woodTypes],
+                ['field' => 'varnish_finish', 'label' => 'Varnish finish', 'any' => 'Any finish', 'values' => $varnishFinishes],
+            ] as $filter)
+                @php($field = $filter['field'])
+                <div class="col-md-4"><label class="form-label" for="{{ $field }}">{{ $filter['label'] }}</label><select class="form-select" id="{{ $field }}" name="{{ $field }}"><option value="">{{ $filter['any'] }}</option>
+                    @if(filled($preference?->{$field}) && !$filter['values']->contains($preference->{$field}) && !($field === 'wood_type' && $preference->{$field} === 'To be confirmed'))
+                        <option value="{{ $preference->{$field} }}" @selected(old($field,$preference->{$field})===$preference->{$field})>{{ $preference->{$field} }} (saved selection)</option>
+                    @endif
+                    @foreach($filter['values'] as $value)<option @selected(old($field,$preference?->{$field})===$value)>{{ $value }}</option>@endforeach
+                </select></div>
+            @endforeach
 
             <div class="col-12 d-flex justify-content-end"><button class="btn btn-primary btn-lg planning-save-button" type="submit" data-preferences-submit>{{ $preference ? 'Update preferences' : 'Save preferences and continue' }}</button></div>
         </div>

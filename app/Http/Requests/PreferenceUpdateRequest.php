@@ -30,14 +30,16 @@ class PreferenceUpdateRequest extends FormRequest
 
     public function rules(): array
     {
+        $options = FurnitureProduct::catalogFilterOptions();
+        $preference = $this->user()?->preference;
         $rangeRules = ['bail', 'required', 'string', 'max:64', 'regex:/\A\d+(?:\.\d{1,2})?-\d+(?:\.\d{1,2})?\z/'];
         $preferenceRules = [
-            'furniture_type' => ['required', 'string', Rule::in(FurnitureProduct::recommendationTypes()->all())],
+            'furniture_type' => ['required', 'string', Rule::in(FurnitureProduct::recommendationTypes()->merge([$preference?->furniture_type])->all())],
             'budget_min' => ['bail', 'required', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999999.99'],
             'budget_max' => ['bail', 'required', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999999.99', 'gt:budget_min'],
-            'style' => ['bail', 'nullable', 'string', 'max:255', Rule::in(FurnitureProduct::where('status', 'active')->distinct()->pluck('style')->all())],
-            'wood_type' => ['bail', 'nullable', 'string', 'max:255', Rule::in(FurnitureProduct::where('status', 'active')->distinct()->pluck('wood_type')->all())],
-            'varnish_finish' => ['bail', 'nullable', 'string', 'max:255', Rule::in(FurnitureProduct::where('status', 'active')->distinct()->pluck('varnish_finish')->all())],
+            'style' => ['bail', 'nullable', 'string', 'max:255', Rule::in($options['styles']->merge([$preference?->style])->all())],
+            'wood_type' => ['bail', 'nullable', 'string', 'max:255', Rule::in($options['woods']->merge([$preference?->wood_type])->all())],
+            'varnish_finish' => ['bail', 'nullable', 'string', 'max:255', Rule::in($options['finishes']->merge([$preference?->varnish_finish])->all())],
             'room_width_m' => ['nullable', 'numeric', 'min:1', 'max:50', 'required_with:room_depth_m'],
             'room_depth_m' => ['nullable', 'numeric', 'min:1', 'max:50', 'required_with:room_width_m'],
             'notes' => ['nullable', 'string', 'max:1000'],

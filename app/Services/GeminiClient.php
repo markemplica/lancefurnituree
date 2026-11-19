@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -67,7 +68,31 @@ class GeminiClient
         if ($this->requestCeiling !== null && $this->providerRequests >= $this->requestCeiling) {
             throw new AiRequestBudgetExceeded;
         }
-        app(AiUsageBudget::class)->reserve($image, auth()->id() ?? $this->actorId ?? Context::getHidden('ai_user_id'), $operation);
+        // The unique durable claim survives worker death, lock expiry and redelivery.
+        // Never release it after a submitted request, even on timeout or malformed output.
+        $action = Context::getHidden('ai_action_key');
+        DB::transaction(function () use ($action, $operation, $image) {
+            // Claim first: SQLite also acquires its write reservation before any reads.
+            if ($action && ! DB::table('ai_action_attempts')->insertOrIgnore([
+                'attempt_key' => hash('sha256', $action.'|'.$operation),
+                'action_key' => $action,
+                'operation' => $operation, 'created_at' => now(),
+            ])) throw new AiRequestBudgetExceeded;
+            if (is_string($action) && preg_match('/^preview-v2:(\d+):(.+)$/D', $action, $parts)) {
+                $transfer = Context::getHidden('ai_photo_transfer');
+                $room = \App\Models\RoomImage::whereKey($transfer['room_id'] ?? 0)->lockForUpdate()->first();
+                $generation = \App\Models\RoomPreviewGeneration::whereKey((int) $parts[1])->lockForUpdate()->first();
+                if (! $room || ! $generation || (int) $generation->room_image_id !== (int) $room->id
+                    || $parts[2] !== ($generation->attempt_token ?? $generation->cache_key)) throw new \RuntimeException('preview_inputs_changed');
+                $product = \App\Models\FurnitureProduct::find($generation->furniture_product_id);
+                if (! $product || ! hash_equals($generation->cache_key, RoomPreviewIdentity::key($room, $product))) throw new \RuntimeException('preview_inputs_changed');
+                if (! in_array($operation, ['furnished_preview', 'room_preview_verification'], true)
+                    || DB::table('ai_action_attempts')->where('action_key', 'like', 'preview-v2:'.$generation->id.':%')->count() > max(0, (int) config('roompreview.max_provider_calls', 8))) {
+                    throw new AiRequestBudgetExceeded;
+                }
+            }
+            app(AiUsageBudget::class)->reserve($image, auth()->id() ?? $this->actorId ?? Context::getHidden('ai_user_id'), $operation);
+        });
         $this->providerRequests++;
     }
 
@@ -100,7 +125,7 @@ class GeminiClient
             throw new AiAggregateBudgetExceeded;
         }
         $chat = in_array($operation, ['chat_response', 'recommendation_explanation'], true);
-        $singleCall = in_array($operation, ['room_analysis', 'room_preview_verification', 'chat_response', 'recommendation_explanation'], true);
+        $singleCall = in_array($operation, ['room_analysis', 'room_analysis_geometry_retry', 'room_preview_verification', 'chat_response', 'recommendation_explanation'], true);
         if ($singleCall) {
             $retryAttempts = 0;
             $modelLimit = 1;
@@ -118,7 +143,7 @@ class GeminiClient
                     $payload['generationConfig']['responseMimeType'] = 'application/json';
                 }
                 if ($json && $schema) {
-                    if (in_array($operation, ['room_analysis', 'room_preview_verification'], true)) {
+                    if (in_array($operation, ['room_analysis', 'room_analysis_geometry_retry', 'room_preview_verification'], true)) {
                         // One JSON-mode call avoids a rejected complex schema followed by another paid call.
                         $payload['contents'][0]['parts'][] = ['text' => 'Return JSON only matching this schema. Coordinates must follow the visible photo; omit uncertain door fit corners. '.json_encode($schema)];
                     } else {
@@ -199,9 +224,14 @@ class GeminiClient
                     ->connectTimeout(5)->timeout(max(1, min($image ? 120 : 30, $timeout)))
                     ->withOptions(['allow_redirects' => false])
                     ->beforeSending(function () use ($image, $operation, $payload) {
-                        $this->countProviderRequest($image, $operation);
                         $transfer = Context::getHidden('ai_photo_transfer');
                         $hasPhoto = collect($payload['contents'][0]['parts'] ?? [])->contains(fn ($part) => isset($part['inline_data']) || isset($part['inlineData']));
+                        if ($hasPhoto && Context::getHidden('ai_action_key') && ! is_array($transfer)) throw new \RuntimeException('photo_consent_required');
+                        if ($hasPhoto && is_array($transfer)) {
+                            $room = \App\Models\RoomImage::find($transfer['room_id'] ?? 0);
+                            if (! $room || ! AiProvider::hasPhotoConsent($room) || $room->user_id !== ($transfer['user_id'] ?? null)) throw new \RuntimeException('photo_consent_required');
+                        }
+                        $this->countProviderRequest($image, $operation);
                         if ($hasPhoto && is_array($transfer)) {
                             app(PrivacyAudit::class)->record('room_photo_sent_to_gemini', 'room_image', $transfer['room_id'], ['purpose' => $transfer['purpose']], $transfer['user_id']);
                         }

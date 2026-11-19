@@ -1,0 +1,11 @@
+[
+  {"name":"tilted near frame","quad":[[12,12],[33,18],[40,91],[17,87]],"valid":true},
+  {"name":"recessed perspective","quad":[[50,8],[67,20],[63,85],[48,90]],"valid":true},
+  {"name":"visible frame at image edge","quad":[[0,15],[1.5,15],[1.5,85],[0,85]],"valid":true},
+  {"name":"fractional legacy coordinates","quad":[[0.12,0.12],[0.33,0.18],[0.40,0.91],[0.17,0.87]],"valid":true},
+  {"name":"crossed","quad":[[12,12],[40,91],[33,18],[17,87]],"valid":false},
+  {"name":"duplicate corner","quad":[[12,12],[33,18],[33,18],[17,87]],"valid":false},
+  {"name":"outside image","quad":[[-12,12],[33,18],[40,91],[17,87]],"valid":false},
+  {"name":"partial frame","quad":[[12,12],[33,18],[40,91]],"valid":false},
+  {"name":"collinear","quad":[[10,10],[20,20],[30,30],[40,40]],"valid":false}
+]

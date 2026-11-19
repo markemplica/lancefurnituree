@@ -87,9 +87,22 @@ class FurnitureProduct extends Model
 
     public static function recommendationTypes(): Collection
     {
-        return static::active()->select('category')->distinct()->pluck('category')
+        $legacyTypes = static::active()->select('category')->distinct()->pluck('category')
             ->map(fn (string $category) => static::recommendationTypeForCategory($category))
             ->unique()->sort()->values();
+
+        return collect(config('furnicraft.catalog_categories', []))->merge($legacyTypes)->unique()->values();
+    }
+
+    public static function catalogFilterOptions(): array
+    {
+        return [
+            'categories' => collect(config('furnicraft.catalog_categories', [])),
+            'styles' => static::active()->whereNotIn('style', ['Contemporary', 'Practical'])->distinct()->orderBy('style')->pluck('style'),
+            'woods' => static::active()->whereNotIn('wood_type', ['Mangga', 'To be confirmed'])
+                ->distinct()->pluck('wood_type')->merge(['Tanguile', 'Narra'])->unique()->sort()->values(),
+            'finishes' => static::active()->distinct()->orderBy('varnish_finish')->pluck('varnish_finish'),
+        ];
     }
 
     public function scopeActive(Builder $query): Builder
@@ -106,6 +119,11 @@ class FurnitureProduct extends Model
 
     public function scopeOfRecommendationType(Builder $query, string $type): Builder
     {
+        // Catalog categories are exact choices; older saved broad types still work.
+        if (in_array($type, config('furnicraft.catalog_categories', []), true)) {
+            return $query->where($query->getModel()->qualifyColumn('category'), $type);
+        }
+
         $categories = static::active()->select('category')->distinct()->pluck('category')
             ->filter(fn (string $category) => static::recommendationTypeForCategory($category) === $type)
             ->values()

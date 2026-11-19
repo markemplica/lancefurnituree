@@ -91,9 +91,16 @@ class RoomVisualizationController extends Controller
                 $lock = \Illuminate\Support\Facades\Cache::lock($cacheKey.':lock', 90);
                 if (! $lock->get()) return response()->json($fallback);
                 try {
+                    $previousAction = \Illuminate\Support\Facades\Context::getHidden('ai_action_key');
+                    \Illuminate\Support\Facades\Context::addHidden('ai_action_key', $cacheKey);
+                    \Illuminate\Support\Facades\Context::addHidden('ai_photo_transfer', ['room_id' => $roomImage->id, 'purpose' => 'room_preview_verification', 'user_id' => $roomImage->user_id]);
                     $result = \Illuminate\Support\Facades\Cache::get($cacheKey) ?? $gemini->verifyRoomPlacement($roomImage->image_path, $previewBase64, $data['placement']);
                     \Illuminate\Support\Facades\Cache::put($cacheKey, $result, ($result['valid'] ?? false) ? 600 : 30);
-                } finally { $lock->release(); }
+                } finally {
+                    $previousAction === null ? \Illuminate\Support\Facades\Context::forgetHidden('ai_action_key') : \Illuminate\Support\Facades\Context::addHidden('ai_action_key', $previousAction);
+                    \Illuminate\Support\Facades\Context::forgetHidden('ai_photo_transfer');
+                    $lock->release();
+                }
             }
         } catch (\Throwable $exception) {
             \Illuminate\Support\Facades\Log::warning('Visual check safely fell back', ['exception' => $exception::class]);
@@ -104,6 +111,8 @@ class RoomVisualizationController extends Controller
             'room_image_id' => $roomImage->id,
             'furniture_product_id' => $product->id,
         ]);
+        // The legacy verifier must not replace v2 artifacts, cooldowns or attempt accounting.
+        if ($generation->exists && filled($generation->cache_key)) return response()->json($result);
         $history = $generation->placement_json ?? ['iterations' => []];
         $history['iterations'][] = [
             'placement' => $data['placement'],

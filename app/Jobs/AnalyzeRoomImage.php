@@ -33,10 +33,13 @@ class AnalyzeRoomImage implements ShouldQueue
 
     public int $timeout = 240;
 
+    public ?string $requestedAt = null;
+
     public function __construct(public int $roomImageId, public ?string $furnitureType = null, public bool $forceAnalysis = false)
     {
         $this->onQueue('ai');
         $this->deadlineAt = now()->addMinutes(10)->timestamp;
+        $this->requestedAt = RoomImage::find($roomImageId)?->analysis_requested_at?->toISOString();
     }
 
     public function backoff(): array
@@ -57,10 +60,12 @@ class AnalyzeRoomImage implements ShouldQueue
             return;
         }
         $previousActor = Context::getHidden('ai_user_id');
+        $previousAction = Context::getHidden('ai_action_key');
         try {
             $this->perform($gemini, $photos, $audit, $telemetry);
         } finally {
             Context::forgetHidden('ai_photo_transfer');
+            $previousAction === null ? Context::forgetHidden('ai_action_key') : Context::addHidden('ai_action_key', $previousAction);
             $previousActor === null ? Context::forgetHidden('ai_user_id') : Context::addHidden('ai_user_id', $previousActor);
             $lock->release();
         }
@@ -70,10 +75,13 @@ class AnalyzeRoomImage implements ShouldQueue
     {
         $room = RoomImage::find($this->roomImageId);
 
-        if (! $room || ! in_array($room->analysis_status, ['queued', 'processing', 'retrying'], true)) {
+        if (! $room || ! in_array($room->analysis_status, ['queued', 'processing', 'retrying'], true)
+            || ($this->requestedAt !== null && $room->analysis_requested_at?->toISOString() !== $this->requestedAt)
+            || ($this->requestedAt === null && $room->analysis_requested_at !== null)) {
             return;
         }
         Context::addHidden('ai_user_id', $room->user_id);
+        Context::addHidden('ai_action_key', 'room-analysis:'.$room->id.':'.($this->requestedAt ?? $room->analysis_requested_at?->toISOString() ?? $room->created_at?->toISOString()));
 
         if (! $photos->exists($room->image_path)) {
             $telemetry->record('room', 'room_analysis', 'failure', failureCode: 'room_photo_missing');

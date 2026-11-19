@@ -52,13 +52,7 @@ class CatalogController extends Controller
             $this->applyCatalogSearch($query, trim((string) $request->input('q')));
         }
         $products = $query->orderBy('name')->paginate(16)->withQueryString();
-        $options = [
-            'categories' => collect(config('furnicraft.catalog_categories', [])),
-            'styles' => FurnitureProduct::where('status', 'active')->whereNotIn('style', ['Contemporary', 'Practical'])->distinct()->orderBy('style')->pluck('style'),
-            'woods' => FurnitureProduct::where('status', 'active')->where('wood_type', '!=', 'Mangga')
-                ->distinct()->pluck('wood_type')->merge(['Tanguile', 'Narra'])->unique()->sort()->values(),
-            'finishes' => FurnitureProduct::where('status', 'active')->distinct()->orderBy('varnish_finish')->pluck('varnish_finish'),
-        ];
+        $options = FurnitureProduct::catalogFilterOptions();
         $favoriteIds = $request->user()?->favorites()->pluck('furniture_products.id') ?? collect();
 
         $data = compact('products', 'options', 'favoriteIds');

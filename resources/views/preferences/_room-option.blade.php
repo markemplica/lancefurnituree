@@ -10,7 +10,7 @@
                         <div class="d-flex flex-wrap gap-2">
 
                             <form method="POST" action="{{ route('room.destroy', $room) }}" data-delete-room>@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" type="submit">Delete photo</button></form>
-                            <form method="POST" action="{{ route('room.reanalyze', $room) }}">@csrf<button class="btn btn-sm btn-outline-dark" type="submit" data-room-retry @disabled($analysisBusy)>Re-analyze room</button></form>
+                            <form method="POST" action="{{ route('room.reanalyze', $room) }}" data-room-reanalyze>@csrf<button class="btn btn-sm btn-outline-dark" type="submit" data-room-retry @disabled($analysisBusy)>Re-analyze room</button></form>
                         </div>
                     </div>
                 </article>

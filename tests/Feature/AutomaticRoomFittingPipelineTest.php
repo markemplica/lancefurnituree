@@ -17,7 +17,7 @@ class AutomaticRoomFittingPipelineTest extends TestCase
     private function pipeline(): array
     {
         Storage::fake('local');
-        config(['roompreview.max_generation_attempts' => 1]);
+        config(['roompreview.max_generation_attempts' => 1, 'roompreview.use_v2_pipeline' => true]);
         $room = RoomImage::create([
             'user_id' => User::factory()->create()->id, 'image_path' => 'rooms/source.png',
             'image_sha256' => str_repeat('a', 64), 'gemini_consent_at' => now(),
@@ -80,7 +80,7 @@ class AutomaticRoomFittingPipelineTest extends TestCase
         $gemini->shouldReceive('limitProviderRequests')->once()->with(2)->andReturnNull();
         $gemini->shouldNotReceive('analyzeRoom');
         $gemini->shouldReceive('furnishRoom')->once()->andReturn(['bytes'=>'ai-image','mime_type'=>'image/png']);
-        $gemini->shouldReceive('verifyGeneratedRoom')->once()->andReturn(['passed'=>false]);
+        $gemini->shouldNotReceive('verifyGeneratedRoom');
         $raster->shouldReceive('pixelGuard')->once()->andReturn(['supported'=>true,'passed'=>false]);
         app(RoomPreviewV2Service::class)->process($generation->id);
         $this->assertSame('fallback',$generation->fresh()->status);

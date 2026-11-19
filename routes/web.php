@@ -83,6 +83,7 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/reservations', [ReservationController::class, 'store'])->name('reservations.store')->middleware('throttle:reservation-requests');
         Route::patch('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->name('reservations.cancel')->middleware('throttle:reservation-cancellations');
+        Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy')->middleware('throttle:reservation-cancellations');
     });
 
     Route::prefix('admin')->name('admin.')->middleware('role:admin')->group(function () {

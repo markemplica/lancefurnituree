@@ -21,7 +21,21 @@
             <p class="small text-muted mb-0">Requested {{ $reservation->created_at->format('F j, Y · g:i A') }}@if(in_array($reservation->status, ['confirmed', 'completed', 'no_show']) && $reservation->confirmed_at) · Request approved {{ $reservation->confirmed_at->format('F j, Y') }}@endif</p>
         </div>
         <div class="reservation-card-actions">
-            @if(in_array($reservation->status, ['pending', 'confirmed']))<form method="POST" action="{{ route('reservations.cancel',$reservation) }}">@csrf @method('PATCH')<input class="form-control form-control-sm mb-1" name="cancellation_reason" placeholder="Reason (optional)"><button class="btn btn-sm btn-outline-danger" data-confirm="Cancel this reservation request?">Cancel request</button></form>@else<a class="btn btn-sm btn-outline-dark" href="{{ route('catalog.show',$reservation->product) }}">View product</a>@endif
+            @if(in_array($reservation->status, ['pending', 'confirmed']))
+                <form method="POST" action="{{ route('reservations.cancel',$reservation) }}" data-cancel-reservation data-reservation-name="{{ $reservation->product->name }}" data-reservation-reference="{{ $reservation->reference }}">
+                    @csrf @method('PATCH')
+                    <input type="hidden" name="cancellation_reason">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" aria-haspopup="dialog" aria-controls="cancel-reservation-dialog">Cancel request</button>
+                </form>
+            @else
+                <a class="btn btn-sm btn-outline-dark" href="{{ route('catalog.show',$reservation->product) }}">View product</a>
+                @if($reservation->status === 'cancelled')
+                    <form method="POST" action="{{ route('reservations.destroy',$reservation) }}" class="mt-2" data-delete-reservation data-reservation-name="{{ $reservation->product->name }}" data-reservation-reference="{{ $reservation->reference }}">
+                        @csrf @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-outline-danger" aria-haspopup="dialog" aria-controls="delete-reservation-dialog">Delete</button>
+                    </form>
+                @endif
+            @endif
         </div>
     </div>
     <div class="reservation-timeline-wrap">
@@ -38,4 +52,33 @@
 </article>
 @empty<div class="empty-state"><h2>No reservation requests yet.</h2><p>Reserve from a catalog page or recommendation result.</p></div>@endforelse
 {{ $reservations->links() }}
+<dialog id="cancel-reservation-dialog" class="reservation-dialog reservation-cancel-dialog" aria-labelledby="cancel-reservation-title" aria-describedby="cancel-reservation-item">
+    <form method="dialog" class="vstack gap-3" data-cancellation-choice>
+        <div>
+            <h2 class="h4 mb-2" id="cancel-reservation-title">Cancel this reservation?</h2>
+            <p class="small text-muted mb-0" id="cancel-reservation-item" data-reservation-action-item></p>
+        </div>
+        <div>
+            <label class="form-label" for="reservation-cancellation-reason">Reason <span class="text-muted">(optional)</span></label>
+            <textarea id="reservation-cancellation-reason" class="form-control" rows="3" maxlength="1000" placeholder="Why are you cancelling?" data-cancellation-reason autofocus></textarea>
+        </div>
+        <div class="reservation-cancel-actions">
+            <button type="button" class="btn btn-outline-dark" data-reservation-action-no>No</button>
+            <button type="submit" class="btn btn-danger" value="yes">Yes</button>
+        </div>
+    </form>
+</dialog>
+<dialog id="delete-reservation-dialog" class="reservation-dialog reservation-cancel-dialog" aria-labelledby="delete-reservation-title" aria-describedby="delete-reservation-item delete-reservation-description">
+    <form method="dialog" class="vstack gap-3">
+        <div>
+            <h2 class="h4 mb-2" id="delete-reservation-title">Delete this cancelled reservation?</h2>
+            <p class="small text-muted mb-0" id="delete-reservation-item" data-reservation-action-item></p>
+        </div>
+        <p class="mb-0" id="delete-reservation-description">Remove this cancelled request from your list?</p>
+        <div class="reservation-cancel-actions">
+            <button type="button" class="btn btn-outline-dark" data-reservation-action-no>No</button>
+            <button type="submit" class="btn btn-danger" value="yes">Yes</button>
+        </div>
+    </form>
+</dialog>
 @endsection

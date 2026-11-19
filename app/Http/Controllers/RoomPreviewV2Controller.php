@@ -30,16 +30,15 @@ class RoomPreviewV2Controller extends Controller
         }
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $roomImage, $photos, $product) {
-            RoomImage::whereKey($roomImage->id)->lockForUpdate()->firstOrFail();
-            $hash = $roomImage->image_sha256 ?: $photos->metadata($roomImage->image_path)['sha256'];
-            $version = (string) config('roompreview.pipeline_version', 'v2');
-            $cacheKey = hash('sha256', implode('|', [$hash, $product->id, $product->updated_at?->toISOString(), $version, \App\Services\RoomPreviewV2Service::PLACEMENT_VERSION]));
+            $roomImage = RoomImage::whereKey($roomImage->id)->lockForUpdate()->firstOrFail();
+            $cacheKey = \App\Services\RoomPreviewIdentity::key($roomImage, $product);
             $generation = RoomPreviewGeneration::firstOrNew([
                 'room_image_id' => $roomImage->id,
                 'furniture_product_id' => $product->id,
             ]);
-            if ($request->boolean('retry') && in_array($generation->status, ['fallback', 'failed'], true)
-                && $generation->completed_at && $generation->completed_at->gt(now()->subMinute())) {
+            if (in_array($generation->status, ['fallback', 'failed'], true)
+                && $generation->completed_at && $generation->completed_at->gt(now()->subMinute())
+                && ($request->boolean('retry') || $generation->cache_key !== $cacheKey || $generation->status === 'failed')) {
                 abort(429, 'Please wait one minute before another paid preview attempt. Your local preview remains available.');
             }
             if ($generation->exists && hash_equals((string) $generation->cache_key, $cacheKey)
@@ -49,12 +48,12 @@ class RoomPreviewV2Controller extends Controller
             }
 
             $generation->fill([
-                'status' => 'queued', 'attempts' => 0, 'message' => 'Preview queued.',
+                'status' => 'queued', 'attempt_token' => (string) \Illuminate\Support\Str::uuid(), 'message' => 'Preview queued.',
                 'placement_json' => null, 'cache_key' => $cacheKey, 'failure_code' => null,
-                'confidence' => null, 'confidence_label' => null, 'metrics_json' => null, 'completed_at' => null,
+                'confidence' => null, 'confidence_label' => null, 'completed_at' => null,
             ]);
             $generation->save();
-            GenerateRoomPreviewV2::dispatch($generation->id, $cacheKey)->afterCommit();
+            GenerateRoomPreviewV2::dispatch($generation->id, $cacheKey, $generation->attempt_token)->afterCommit();
 
             return response()->json($this->payload($generation, $roomImage), 202);
         });
@@ -71,6 +70,8 @@ class RoomPreviewV2Controller extends Controller
     {
         $room = RoomImage::findOrFail($generation->room_image_id);
         abort_unless($room->user_id === $request->user()->id, 404);
+        $product = FurnitureProduct::findOrFail($generation->furniture_product_id);
+        abort_unless(hash_equals((string) $generation->cache_key, \App\Services\RoomPreviewIdentity::key($room, $product)), 404);
         $path = data_get($generation->placement_json, 'artifact_path');
         abort_unless(filled($path) && app(RoomPhotoService::class)->exists($path), 404);
         $photos = app(RoomPhotoService::class);
@@ -86,6 +87,10 @@ class RoomPreviewV2Controller extends Controller
     {
         $data = $generation->placement_json ?? [];
         $path = data_get($data, 'artifact_path');
+        if ($path) {
+            $product = FurnitureProduct::find($generation->furniture_product_id);
+            if (! $product || ! hash_equals((string) $generation->cache_key, \App\Services\RoomPreviewIdentity::key($room, $product))) $path = null;
+        }
         return [
             'status' => $generation->status,
             'message' => $generation->message,

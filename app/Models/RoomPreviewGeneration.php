@@ -8,7 +8,7 @@ class RoomPreviewGeneration extends Model
 {
     protected $fillable = [
         'room_image_id', 'furniture_product_id', 'status', 'attempts', 'message', 'placement_json',
-        'cache_key', 'confidence', 'confidence_label', 'failure_code', 'metrics_json', 'completed_at',
+        'cache_key', 'attempt_token', 'confidence', 'confidence_label', 'failure_code', 'metrics_json', 'completed_at',
     ];
 
     protected function casts(): array

@@ -31,7 +31,7 @@ class PreviewRetryTest extends TestCase
         Storage::disk('local')->put($room->image_path, 'fixture');
         $product = FurnitureProduct::create(['name' => 'Retry chair', 'slug' => 'retry-chair', 'description' => 'Chair', 'category' => 'Chair', 'wood_type' => 'Wood', 'varnish_finish' => 'Natural', 'style' => 'Modern', 'price' => 100, 'status' => 'active']);
         $product->refresh();
-        $key = hash('sha256', implode('|', [$room->image_sha256, $product->id, $product->updated_at->toISOString(), config('roompreview.pipeline_version'), \App\Services\RoomPreviewV2Service::PLACEMENT_VERSION]));
+        $key = \App\Services\RoomPreviewIdentity::key($room, $product);
         $generation = RoomPreviewGeneration::create(['room_image_id' => $room->id, 'furniture_product_id' => $product->id, 'status' => $status, 'cache_key' => $key]);
         $this->actingAs($user);
         return [$room, $product, $generation];

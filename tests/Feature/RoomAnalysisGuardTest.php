@@ -73,7 +73,15 @@ class RoomAnalysisGuardTest extends TestCase
 
     private function response(bool $usable): array
     {
-        return ['candidates' => [['content' => ['parts' => [['text' => json_encode(['vision_geometry' => [
+        return ['candidates' => [['content' => ['parts' => [['text' => json_encode(['candidate_zones' => [[
+            'surface' => 'floor', 'anchor_x_percent' => 50, 'anchor_y_percent' => 86, 'max_width_percent' => 60,
+            'suitable_types' => ['chair', 'storage', 'bed', 'living set', 'dining', 'table', 'seating'],
+            'clearance_score' => 80, 'occlusion_score' => 10, 'confidence' => 'medium', 'reason' => 'Clear visible area.',
+        ], [
+            'surface' => 'wall-floor', 'anchor_x_percent' => 60, 'anchor_y_percent' => 88, 'max_width_percent' => 54,
+            'suitable_types' => ['storage', 'bed', 'cabinet', 'wardrobe'],
+            'clearance_score' => 82, 'occlusion_score' => 8, 'confidence' => 'medium', 'reason' => 'Clear wall-floor zone.',
+        ]], 'vision_geometry' => [
             'image_quality' => ['usable' => $usable, 'issues' => $usable ? [] : ['blurred']],
             'floor_polygon' => [], 'walls' => [], 'openings' => [], 'horizon_y' => null,
             'blocked_zones' => [], 'existing_furniture' => [], 'scale_clues' => [], 'lighting' => [], 'confidence' => .5,
@@ -110,6 +118,100 @@ class RoomAnalysisGuardTest extends TestCase
             && $request->hasHeader('x-goog-api-key', 'test-key')
             && isset($request['contents'][0]['parts'][1]['inline_data']['data']));
         $this->assertDatabaseHas('ai_service_events', ['operation' => 'room_analysis', 'model' => 'gemini-3.1-flash-lite', 'status' => 'success']);
+    }
+
+    public function test_missing_placement_zones_get_one_budgeted_geometry_retry_and_merge_valid_zones(): void
+    {
+        $room = $this->room();
+        $first = $this->response(true);
+        $firstText = json_decode(data_get($first, 'candidates.0.content.parts.0.text'), true);
+        $firstText['candidate_zones'] = [];
+        $first['candidates'][0]['content']['parts'][0]['text'] = json_encode($firstText);
+        $retry = ['candidate_zones' => [[
+            'surface' => 'floor', 'anchor_x_percent' => 58, 'anchor_y_percent' => 84, 'max_width_percent' => 42,
+            'suitable_types' => ['chair', 'storage', 'bed', 'living set', 'dining', 'table'],
+            'clearance_score' => 90, 'occlusion_score' => 5, 'confidence' => 'high', 'reason' => 'Clear floor area.',
+        ], [
+            'surface' => 'wall-floor', 'anchor_x_percent' => 72, 'anchor_y_percent' => 89, 'max_width_percent' => 48,
+            'suitable_types' => ['storage', 'bed'], 'clearance_score' => 84, 'occlusion_score' => 7,
+            'confidence' => 'high', 'reason' => 'Clear wall-floor zone.',
+        ]], 'openings' => []];
+        $retryResponse = ['candidates' => [['content' => ['parts' => [['text' => json_encode($retry)]]]]]];
+        Http::fakeSequence()->push($first)->push($retryResponse);
+
+        app()->call([new AnalyzeRoomImage($room->id, 'all catalog furniture'), 'handle']);
+
+        $saved = $room->fresh()->analysis;
+        $this->assertTrue($saved['geometry_retry_attempted']);
+        $this->assertTrue($saved['geometry_retry_succeeded']);
+        $this->assertEquals(58, $saved['candidate_zones'][0]['anchor_x_percent']);
+        $this->assertTrue(app(\App\Services\FurniturePlacementService::class)->forProduct(
+            $saved,
+            new \App\Models\FurnitureProduct(['category' => 'Chair', 'width_cm' => 60, 'depth_cm' => 60]),
+        )['renderable']);
+        Http::assertSentCount(2);
+        $this->assertDatabaseHas('ai_action_attempts', ['operation' => 'room_analysis']);
+        $this->assertDatabaseHas('ai_action_attempts', ['operation' => 'room_analysis_geometry_retry']);
+        $this->assertDatabaseCount('privacy_audit_events', 2);
+    }
+
+    public function test_invalid_retry_coordinates_are_rejected_and_not_rendered(): void
+    {
+        $room = $this->room();
+        $first = $this->response(true);
+        $firstText = json_decode(data_get($first, 'candidates.0.content.parts.0.text'), true);
+        $firstText['candidate_zones'] = [];
+        $first['candidates'][0]['content']['parts'][0]['text'] = json_encode($firstText);
+        $retry = ['candidate_zones' => [[
+            'surface' => 'floor', 'anchor_x_percent' => 120, 'anchor_y_percent' => 86, 'max_width_percent' => 90,
+            'suitable_types' => ['chair'], 'clearance_score' => 90, 'occlusion_score' => 5, 'confidence' => 'high', 'reason' => 'Invalid location.',
+        ]], 'openings' => []];
+        $retryResponse = ['candidates' => [['content' => ['parts' => [['text' => json_encode($retry)]]]]]];
+        Http::fakeSequence()->push($first)->push($retryResponse);
+
+        app()->call([new AnalyzeRoomImage($room->id, 'all catalog furniture'), 'handle']);
+
+        $saved = $room->fresh()->analysis;
+        $this->assertTrue($saved['geometry_retry_attempted']);
+        $this->assertFalse($saved['geometry_retry_succeeded']);
+        $this->assertSame([], $saved['candidate_zones']);
+        $placement = app(\App\Services\FurniturePlacementService::class)->forProduct($saved, new \App\Models\FurnitureProduct(['category' => 'Chair']));
+        $this->assertFalse($placement['renderable']);
+        Http::assertSentCount(2);
+        $this->assertDatabaseCount('ai_action_attempts', 2);
+    }
+
+    public function test_configured_single_call_limit_blocks_the_optional_retry(): void
+    {
+        $room = $this->room();
+        config(['services.gemini.max_calls_per_operation' => 1]);
+        $first = $this->response(true);
+        $firstText = json_decode(data_get($first, 'candidates.0.content.parts.0.text'), true);
+        $firstText['candidate_zones'] = [];
+        $first['candidates'][0]['content']['parts'][0]['text'] = json_encode($firstText);
+        Http::fake(['*' => Http::response($first)]);
+
+        app()->call([new AnalyzeRoomImage($room->id, 'all catalog furniture'), 'handle']);
+
+        $saved = $room->fresh()->analysis;
+        $this->assertFalse($saved['geometry_retry_attempted']);
+        $this->assertFalse($saved['geometry_retry_succeeded']);
+        Http::assertSentCount(1);
+        $this->assertDatabaseCount('ai_action_attempts', 1);
+    }
+
+    public function test_room_photo_without_consent_is_never_sent_for_initial_or_retry_analysis(): void
+    {
+        $room = $this->room();
+        $room->update(['gemini_consent_at' => null]);
+        Http::fake();
+
+        app()->call([new AnalyzeRoomImage($room->id, 'all catalog furniture'), 'handle']);
+
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('privacy_audit_events', 0);
+        $this->assertDatabaseCount('ai_action_attempts', 0);
+        $this->assertFalse($room->fresh()->analysis['gemini_used']);
     }
 
     public function test_unusable_photo_is_fallback_and_actual_transfer_is_audited(): void

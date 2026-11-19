@@ -277,6 +277,49 @@ document.addEventListener('DOMContentLoaded', () => {
         authSuccess.addEventListener('close', () => document.querySelector('#email')?.focus());
         authSuccess.showModal();
     }
+    const setupReservationAction = (dialogId, formSelector) => {
+        const dialog = document.getElementById(dialogId);
+        if (!dialog) return;
+        const reason = dialog.querySelector('[data-cancellation-reason]');
+        const item = dialog.querySelector('[data-reservation-action-item]');
+        const submitting = new WeakSet();
+        let activeForm = null;
+        let approvedForm = null;
+        let opener = null;
+        document.querySelectorAll(formSelector).forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                if (approvedForm === form) {
+                    approvedForm = null;
+                    submitting.add(form);
+                    form.setAttribute('aria-busy', 'true');
+                    form.querySelector('button[type="submit"]').disabled = true;
+                    return;
+                }
+                event.preventDefault();
+                if (activeForm || submitting.has(form)) return;
+                activeForm = form;
+                opener = event.submitter || form.querySelector('button[type="submit"]');
+                item.textContent = `${form.dataset.reservationName} · ${form.dataset.reservationReference}`;
+                if (reason) reason.value = form.elements.cancellation_reason.value;
+                dialog.returnValue = 'no';
+                dialog.showModal();
+            });
+        });
+        dialog.querySelector('[data-reservation-action-no]').addEventListener('click', () => dialog.close('no'));
+        dialog.addEventListener('close', () => {
+            const form = activeForm;
+            activeForm = null;
+            if (form && dialog.returnValue === 'yes') {
+                if (reason) form.elements.cancellation_reason.value = reason.value;
+                approvedForm = form;
+                form.requestSubmit();
+            } else {
+                opener?.focus();
+            }
+        });
+    };
+    setupReservationAction('cancel-reservation-dialog', '[data-cancel-reservation]');
+    setupReservationAction('delete-reservation-dialog', '[data-delete-reservation]');
     document.addEventListener('submit', (event) => {
         const message = event.submitter?.dataset.confirm || event.target.dataset.confirm;
         if (message && !window.confirm(message)) event.preventDefault();
@@ -1204,9 +1247,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const current = element.dataset.roomAnalysisCurrent || (element.dataset.roomReady === 'true' ? 'completed' : 'queued');
                 if (element.dataset.pollingStopped || !activeAnalysisStatuses.includes(current)) continue;
                 try {
-                    const response = await fetch(element.dataset.roomAnalysisWatch, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json' } });
+                    const watchedFrame = document.querySelector('[data-room-preview]');
+                    const statusUrl = new URL(element.dataset.roomAnalysisWatch, location.href);
+                    if (watchedFrame?.dataset.productId) statusUrl.searchParams.set('product', watchedFrame.dataset.productId);
+                    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json' } });
                     if (!response.ok) { if ([401, 403, 404, 429].includes(response.status)) element.dataset.pollingStopped = 'true'; continue; }
                     const payload = await response.json();
+                    if (payload.product_id && watchedFrame && String(payload.product_id) !== watchedFrame.dataset.productId) continue;
                     element.dataset.roomAnalysisCurrent = payload.status;
                     const retry = element.querySelector('[data-room-retry]');
                     if (retry) retry.disabled = activeAnalysisStatuses.includes(payload.status);
@@ -1221,19 +1268,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         const previewAnalysis = document.querySelector('[data-preview-analysis]');
                         const previewFrame = document.querySelector('[data-room-preview]');
                         if (payload.analysis && previewAnalysis && previewFrame) {
-                            let previousAnalysis = null;
-                            try { previousAnalysis = JSON.parse(previewAnalysis.textContent || 'null'); } catch (_) {}
-                            if (JSON.stringify(previousAnalysis) !== JSON.stringify(payload.analysis)) {
-                                // The server computes product placement from the saved analysis. Reload
-                                // so its placement coordinates and confidence match the new geometry.
-                                window.location.reload();
-                                continue;
+                            if (payload.placement) {
+                                const p = payload.placement;
+                                Object.assign(previewFrame.dataset, {
+                                    initialX: String(p.x_percent), initialY: String(p.y_percent), initialWidth: String(p.max_width_percent),
+                                    initialQuad: JSON.stringify(p.quad_percent), placementRenderable: String(p.renderable), placementSurface: p.surface,
+                                    placementSource: p.source, placementConfidence: p.confidence, placementReason: p.reason,
+                                    placementScore: String(p.score), placementFlip: String(p.flip === -1),
+                                    placementRotation: String(p.rotation_deg), placementPerspective: String(p.perspective_deg),
+                                });
                             }
                         }
                         if (payload.analysis) document.querySelectorAll('[data-preview-analysis]').forEach((node) => { node.textContent = JSON.stringify(payload.analysis); });
                         document.querySelectorAll('[data-room-preview]').forEach((frame) => {
                             frame.dataset.placementStatus = payload.status;
                             const previous = frame.roomPreviewEngine;
+                            if (previous) previous.runId++;
                             if (previous?.canvas) previous.canvas.width = 0;
                             const engine = window.RoomPreviewEngine ? new window.RoomPreviewEngine(frame) : null;
                             if (engine) { frame.roomPreviewEngine = engine; engine.start(); }
@@ -1247,6 +1297,50 @@ document.addEventListener('DOMContentLoaded', () => {
         startBoundedPoll(poll, () => analysisWatches.some(element => !element.dataset.pollingStopped && activeAnalysisStatuses.includes(element.dataset.roomAnalysisCurrent || (element.dataset.roomReady === 'true' ? 'completed' : 'queued'))));
     }
     };
+    document.addEventListener('submit', async (event) => {
+        const form = event.target.closest('form[data-room-reanalyze]');
+        if (!form) return;
+
+        event.preventDefault();
+        const option = form.closest('[data-room-analysis-watch]');
+        const button = form.querySelector('[data-room-retry]');
+        const message = option?.querySelector('[data-room-analysis-message]');
+        if (!option || !button || button.disabled) return;
+
+        button.disabled = true;
+        button.dataset.originalLabel ??= button.textContent.trim();
+        button.textContent = 'Requesting…';
+        if (message) message.textContent = 'Sending the re-analysis request…';
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                signal: AbortSignal.timeout(20000),
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.message || 'The room could not be re-analyzed. Please try again.');
+
+            const status = payload.status || 'queued';
+            const labels = { queued: 'Room analysis queued', processing: 'Analyzing room image', retrying: 'AI temporarily unavailable · retrying', completed: 'AI analyzed', fallback: 'Local guidance', failed: 'Needs retry' };
+            // Fetch the authoritative status once more even if a queue worker finished
+            // before the POST returned, so the room preview can update without a reload.
+            option.dataset.roomAnalysisCurrent = activeAnalysisStatuses.includes(status) ? status : 'queued';
+            option.dataset.roomReady = String(['completed', 'fallback'].includes(status));
+            delete option.dataset.pollingStopped;
+            option.querySelector('[data-room-analysis-label]')?.replaceChildren(document.createTextNode(labels[status] || status));
+            if (message) message.textContent = payload.message || (activeAnalysisStatuses.includes(status) ? 'Room analysis is in progress.' : 'Room analysis status updated.');
+            button.disabled = true;
+            button.textContent = button.dataset.originalLabel;
+
+            watchRoomAnalysis([option]);
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = button.dataset.originalLabel;
+            if (message) message.textContent = error.message || 'Could not send the re-analysis request. Please try again.';
+        }
+    });
     watchRoomAnalysis([...document.querySelectorAll('[data-room-analysis-watch]')]);
     const previewWatches = [...document.querySelectorAll('[data-preview-watch]')];
     const activePreviewStatuses = ['queued', 'processing', 'retrying'];
@@ -1271,6 +1365,59 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         startBoundedPoll(pollPreviews, () => previewWatches.some(element => !element.dataset.pollingStopped && activePreviewStatuses.includes(element.dataset.previewStatus)));
     }
+
+    const recommendationChat = document.querySelector('[data-chat-widget]');
+    if (recommendationChat) {
+        const panel = recommendationChat.querySelector('[data-chat-panel]');
+        const toggle = recommendationChat.querySelector('[data-chat-toggle]');
+        const close = recommendationChat.querySelector('[data-chat-close]');
+        const log = recommendationChat.querySelector('[data-chat-log]');
+        const form = recommendationChat.querySelector('[data-chat-form]');
+        const storageKey = recommendationChat.dataset.chatStorageKey;
+
+        const setChatOpen = (open, focusPanel = true) => {
+            panel.hidden = !open;
+            toggle.setAttribute('aria-expanded', String(open));
+            if (open) {
+                if (log) log.scrollTop = log.scrollHeight;
+                if (focusPanel) close.focus({ preventScroll: true });
+            } else if (focusPanel) {
+                toggle.focus({ preventScroll: true });
+            }
+        };
+
+        toggle.addEventListener('click', () => setChatOpen(panel.hidden));
+        close.addEventListener('click', () => setChatOpen(false));
+        recommendationChat.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !panel.hidden) {
+                event.preventDefault();
+                setChatOpen(false);
+            }
+        });
+        form.addEventListener('submit', () => {
+            try { sessionStorage.setItem(storageKey, 'open'); } catch (error) { /* Chat still submits if storage is unavailable. */ }
+        });
+
+        try {
+            if (sessionStorage.getItem(storageKey) === 'open') {
+                sessionStorage.removeItem(storageKey);
+                setChatOpen(true, false);
+            }
+        } catch (error) { /* Chat remains available when storage is unavailable. */ }
+    }
+
+    document.querySelectorAll('[data-customization-dialog]').forEach((dialog) => {
+        const reservationForm = dialog.closest('form');
+        const trigger = reservationForm?.querySelector('[data-customization-open]');
+        const close = dialog.querySelector('[data-customization-close]');
+        if (!trigger || !close) return;
+
+        trigger.addEventListener('click', () => dialog.showModal());
+        close.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('click', (event) => {
+            if (event.target === dialog) dialog.close();
+        });
+    });
 
     function escapeHtml(value) {
         const div = document.createElement('div');

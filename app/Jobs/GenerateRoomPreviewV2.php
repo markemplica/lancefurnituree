@@ -22,14 +22,14 @@ class GenerateRoomPreviewV2 implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = 600;
 
-    public function __construct(public int $generationId, public string $cacheKey)
+    public function __construct(public int $generationId, public string $cacheKey, public ?string $attemptToken = null)
     {
         $this->onQueue('ai');
     }
 
     public function uniqueId(): string
     {
-        return $this->generationId.':'.$this->cacheKey;
+        return $this->generationId.':'.$this->cacheKey.':'.$this->attemptToken;
     }
 
     public function backoff(): array
@@ -39,12 +39,12 @@ class GenerateRoomPreviewV2 implements ShouldBeUnique, ShouldQueue
 
     public function handle(RoomPreviewV2Service $pipeline): void
     {
-        $pipeline->process($this->generationId, $this->cacheKey);
+        $pipeline->process($this->generationId, $this->cacheKey, $this->attemptToken);
     }
 
     public function failed(?Throwable $exception): void
     {
-        RoomPreviewGeneration::whereKey($this->generationId)->where('cache_key', $this->cacheKey)->whereIn('status', ['queued', 'processing', 'retrying'])->update([
+        RoomPreviewGeneration::whereKey($this->generationId)->where('cache_key', $this->cacheKey)->where('attempt_token', $this->attemptToken)->whereIn('status', ['queued', 'processing', 'retrying'])->update([
             'status' => 'failed',
             'failure_code' => 'queue_job_failed',
             'message' => 'The room preview could not be completed. Please try again.',

@@ -13,10 +13,11 @@ class PreferenceController extends Controller
         \App\Models\RoomImage::recoverStalledForUser($request->user()->id);
         $preference = $request->user()->preference()->first();
         $preferenceComplete = filled($preference?->furniture_type);
-        $styles = FurnitureProduct::where('status', 'active')->distinct()->orderBy('style')->pluck('style');
-        $woodTypes = FurnitureProduct::where('status', 'active')->distinct()->orderBy('wood_type')->pluck('wood_type');
-        $varnishFinishes = FurnitureProduct::where('status', 'active')->distinct()->orderBy('varnish_finish')->pluck('varnish_finish');
-        $furnitureTypes = FurnitureProduct::recommendationTypes();
+        $options = FurnitureProduct::catalogFilterOptions();
+        $styles = $options['styles'];
+        $woodTypes = $options['woods'];
+        $varnishFinishes = $options['finishes'];
+        $furnitureTypes = $options['categories'];
         $rooms = $request->user()->roomImages()->latest()->orderByDesc('id')->paginate(6, ['*'], 'photos_page')->withQueryString();
         $selectedRoomId = $request->user()->roomImages()->whereKey($request->integer('room'))->exists() ? $request->integer('room') : null;
 

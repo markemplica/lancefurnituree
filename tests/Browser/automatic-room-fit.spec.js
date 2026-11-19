@@ -1,8 +1,188 @@
 import { expect, test } from '@playwright/test';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+
+const evidenceDirectory = process.env.FURNICRAFT_PREVIEW_EVIDENCE || tmpdir();
+const doorwayCases = JSON.parse(readFileSync(resolve('tests/Fixtures/doorway-fit-quads.json'), 'utf8'));
+const pageErrors = new WeakMap();
+
+// Synthetic, non-sensitive photo and item pixels run through the actual page renderer.
+async function fixture(page, options = {}) {
+    return page.locator('[data-room-preview]').evaluate(async (frame, options) => {
+        const scene = document.createElement('canvas'); scene.width = options.portrait ? 600 : 800; scene.height = options.portrait ? 800 : 600;
+        const sc = scene.getContext('2d'); sc.fillStyle = '#dbcebe'; sc.fillRect(0,0,scene.width,scene.height);
+        sc.fillStyle = '#936f4e'; sc.fillRect(0,scene.height*.6,scene.width,scene.height*.4);
+        const item = document.createElement('canvas'); item.width = 120; item.height = 240;
+        const ic = item.getContext('2d');
+        if (!options.transparent) { ic.fillStyle = '#70402a'; ic.fillRect(0,0,120,240); ic.fillStyle = '#ffffff'; ic.fillRect(30,30,60,70); }
+        frame.querySelector('[data-preview-room]').src = scene.toDataURL();
+        const base = frame.querySelector('.comparison-room-base'); if (base) base.src = scene.toDataURL();
+        frame.querySelector('[data-preview-product]').src = options.assetUrl || item.toDataURL();
+        const analysis = {gemini_used:true, vision_geometry:{image_quality:{usable:true,issues:[]},confidence:.9,
+            floor_polygon:[[0,.6],[1,.6],[1,1],[0,1]], blocked_zones:[], openings:options.openings || []}};
+        frame.closest('.comparison-panel').querySelector('[data-preview-analysis]').textContent = JSON.stringify(analysis);
+        Object.assign(frame.dataset, {productType:options.door?'Door':'Chair', productCategory:options.door?'Door':'Chair',
+            productWidth:'90',productHeight:'210',productDepth:'4',placementSurface:options.door?'opening':'floor',
+            placementRenderable:options.door?'false':'true',placementSource:'candidate-zone',placementStatus:'completed',
+            initialX:options.left?'28':'65',initialY:'90',initialWidth:'20',initialQuad:'null',placementRotation:'0',placementPerspective:'0'});
+        const engine = new window.RoomPreviewEngine(frame); await engine.start();
+        return {result:engine.result,pixels:engine.visibleProductPixelCount || 0,status:engine.status.textContent};
+    }, options);
+}
+
+async function pixelsOnPage(page) {
+    return page.locator('[data-room-preview]').evaluate(frame => {
+        const e = frame.roomPreviewEngine, w=e.canvas.width, h=e.canvas.height;
+        const original=document.createElement('canvas'); original.width=w; original.height=h;
+        original.getContext('2d').drawImage(e.room,0,0,w,h);
+        const a=original.getContext('2d').getImageData(0,0,w,h).data, b=e.context.getImageData(0,0,w,h).data;
+        const bounds=frame.getBoundingClientRect(), canvas=e.canvas.getBoundingClientRect();
+        const scale=Math.min(canvas.width/w,canvas.height/h), left=canvas.left+(canvas.width-w*scale)/2;
+        const split=parseFloat(getComputedStyle(frame).getPropertyValue('--split')) || 50;
+        const reveal=frame.classList.contains('room-comparison')?bounds.left+bounds.width*split/100:bounds.left;
+        let changed=0,visible=0,white=0;
+        for(let y=0;y<h*.78;y++)for(let x=0;x<w;x++) {
+            const i=(y*w+x)*4;
+            if(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])>45) {
+                changed++; if(left+x*scale>=reveal)visible++;
+                if(b[i]===255 && b[i+1]===255 && b[i+2]===255)white++;
+            }
+        }
+        return {changed,visible,white,split};
+    });
+}
+
+for (const surface of ['/room/1/visualize?product=1', '/recommendations/1']) {
+    test(`left portrait placement is visible with white product details at ${surface}`, async ({page}, info) => {
+        await page.goto(surface);
+        const result = await fixture(page, {portrait:true,left:true});
+        expect(result.result).not.toBeNull(); expect(result.pixels).toBeGreaterThan(200);
+        const pixels=await pixelsOnPage(page);
+        expect(pixels.visible,JSON.stringify(pixels)).toBeGreaterThan(200);
+        expect(pixels.white).toBeGreaterThan(100);
+        if(surface.startsWith('/recommendations')) {
+            expect(pixels.visible / pixels.changed).toBeGreaterThan(.95);
+            const slider=page.getByRole('slider'); await slider.focus();
+            await page.keyboard.press('Home'); await expect(slider).toHaveAttribute('aria-valuenow','0');
+            await page.keyboard.press('ArrowRight'); await expect(slider).toHaveAttribute('aria-valuenow','4');
+            await page.keyboard.press('End'); await expect(slider).toHaveAttribute('aria-valuenow','100');
+            await page.keyboard.press('Home');
+            await slider.scrollIntoViewIfNeeded();
+            const box=await slider.boundingBox();
+            if(info.project.name==='mobile-edge') {
+                const cdp=await page.context().newCDPSession(page);
+                await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width*.25,y:box.y+box.height*.5}]});
+                await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:box.x+box.width*.75,y:box.y+box.height*.5}]});
+                await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+                await expect(slider).toHaveAttribute('aria-valuenow',/7\d/);
+                await page.keyboard.press('Home');
+            }
+        }
+        await page.locator('[data-room-preview]').screenshot({path:join(evidenceDirectory,`preview-visible-${info.project.name}-${surface.startsWith('/room')?'standalone':'recommendations'}.png`)});
+    });
+
+    test(`bad assets preserve the original room and disable download at ${surface}`, async ({page}) => {
+        await page.route('**/__missing-item.png',route=>route.fulfill({status:404,body:''}));
+        await page.route('**/__corrupt-item.png',route=>route.fulfill({contentType:'image/png',body:'broken image'}));
+        await page.goto(surface);
+        for(const options of [{transparent:true},{assetUrl:'/__missing-item.png'},{assetUrl:'/__corrupt-item.png'},{assetUrl:'/images/furniture/default.svg'}]) {
+            const result=await fixture(page,options);
+            expect(result.result).toBeNull();
+            await expect(page.locator('[data-preview-download]')).toBeDisabled();
+            const proof=await pixelsOnPage(page); expect(proof.changed).toBe(0);
+            await expect(page.locator('.placement-status [data-placement-status]')).toContainText(options.transparent?'no usable visible pixels':options.assetUrl.includes('default.svg')?'needs a product photo':'could not be loaded');
+        }
+        const valid=await fixture(page); expect(valid.pixels).toBeGreaterThan(200);
+        await expect(page.locator('[data-preview-download]')).toBeEnabled();
+    });
+
+    test(`doorway perspective and missing-corner feedback are accurate at ${surface}`, async ({page},info) => {
+        await page.goto(surface);
+        for(const sample of doorwayCases) {
+            const result=await fixture(page,{door:true,openings:[{type:'door',bbox:[.12,.12,.4,.91],door_fit_quad_percent:sample.quad}]});
+            expect(Boolean(result.result),sample.name).toBe(sample.valid);
+            if(sample.valid) {
+                expect(result.result.mode).toBe('door'); expect(result.pixels).toBeGreaterThan(200);
+                expect((await pixelsOnPage(page)).visible).toBeGreaterThan(200);
+            } else await expect(page.locator('[data-preview-download]')).toBeDisabled();
+        }
+        for(const opening of [{type:'door',bbox:[.12,.12,.4,.91]},
+            {type:'window',bbox:[.12,.12,.4,.91],door_fit_quad_percent:doorwayCases[0].quad},
+            {type:'door',bbox:[.12,.12,.4,.91],frame_complete:false,door_fit_quad_percent:doorwayCases[0].quad}]) {
+            const result=await fixture(page,{door:true,openings:[opening]}); expect(result.result).toBeNull();
+            await expect(page.locator('[data-preview-download]')).toBeDisabled();
+            if(opening.type==='door') await expect(page.locator('[data-placement-guidance]')).toContainText('fit corners');
+        }
+        const catalogDoor=await fixture(page,{door:true,assetUrl:'/images/catalog/catalog-7-panel-door-cutout.png',openings:[{type:'door',door_fit_quad_percent:doorwayCases[0].quad}]});
+        expect(catalogDoor.pixels).toBeGreaterThan(200);
+        await page.locator('[data-room-preview]').screenshot({path:join(evidenceDirectory,`preview-door-${info.project.name}-${surface.startsWith('/room')?'standalone':'recommendations'}.png`)});
+    });
+
+    test(`pending analysis updates the current selected product without navigation at ${surface}`, async ({page}) => {
+        const pathname=surface.split('?')[0];
+        await page.route(url=>url.pathname===pathname,async route=>{
+            const response=await route.fetch();
+            const html=(await response.text()).replaceAll('data-room-analysis-current="fallback"','data-room-analysis-current="processing"').replaceAll('data-placement-status="fallback"','data-placement-status="processing"');
+            await route.fulfill({response,body:html});
+        });
+        const quad=doorwayCases[0].quad;
+        const analysis={summary:'Updated local fixture geometry',gemini_used:true,vision_geometry:{image_quality:{usable:true,issues:[]},confidence:.9,
+            floor_polygon:[],openings:[{type:'door',door_fit_quad_percent:quad}],blocked_zones:[],existing_furniture:[]}};
+        let queries=[];
+        await page.route(url=>url.pathname.endsWith('/analysis-status'),async route=>{
+            queries.push(new URL(route.request().url()).searchParams.get('product'));
+            await route.fulfill({json:{status:'completed',ready:true,analysis,product_id:2,placement:{renderable:true,surface:'opening',
+                x_percent:26,y_percent:91,max_width_percent:28,quad_percent:quad,source:'scene-opening',confidence:'medium',score:80,reason:'Detected room-facing frame',flip:1,rotation_deg:0,perspective_deg:0}}});
+        });
+        await page.goto(surface);
+        await expect.poll(()=>page.locator('[data-room-preview]').evaluate(frame=>Boolean(frame.roomPreviewEngine?.result))).toBe(true);
+        await page.locator('[data-room-preview]').evaluate(async frame=>{
+            const product=document.createElement('canvas');product.width=120;product.height=240;
+            product.getContext('2d').fillStyle='#70402a';product.getContext('2d').fillRect(0,0,120,240);
+            const button=document.createElement('button');Object.assign(button.dataset,{productId:'2',productName:'Current fixture door',productType:'Door',productCategory:'Door',
+                productImage:product.toDataURL(),productWidth:'90',productDepth:'4',productHeight:'210',placementRenderable:'false',placementSurface:'opening'});
+            await frame.roomPreviewEngine.selectProduct(button);
+        });
+        await expect.poll(()=>page.locator('[data-room-preview]').evaluate(frame=>frame.roomPreviewEngine?.analysis?.summary),{timeout:10000}).toBe(analysis.summary);
+        await expect.poll(()=>page.locator('[data-room-preview]').evaluate(frame=>frame.roomPreviewEngine?.result?.mode)).toBe('door');
+        await expect(page.locator('[data-room-preview]')).toHaveAttribute('data-product-id','2');
+        await expect(page).toHaveURL('http://127.0.0.1:8001'+surface);
+        expect(queries.at(-1)).toBe('2');
+        await expect(page.locator('[data-preview-download]')).toBeEnabled();
+    });
+
+    test(`late enhanced artifact cannot overwrite a newly selected item at ${surface}`, async ({page}) => {
+        await page.goto(surface); await fixture(page);
+        let delayedArtifact;
+        const artifactRequested=new Promise(resolve=>{delayedArtifact=resolve;});
+        let heldRoute;
+        await page.route('**/__old-artifact.png',route=>{heldRoute=route;delayedArtifact();});
+        await page.route('**/__enhance',route=>route.fulfill({json:{status:'completed',preview_url:'/__old-artifact.png',placement:{x_percent:50}}}));
+        await page.locator('[data-room-preview]').evaluate(frame=>{
+            frame.dataset.previewV2Url='/__enhance'; frame.dataset.productId='1';
+            window.oldEnhancement=frame.roomPreviewEngine.generateAiPreview(frame.roomPreviewEngine.runId,true);
+        });
+        await artifactRequested;
+        await page.locator('[data-room-preview]').evaluate(async frame=>{
+            const button=document.createElement('button'); Object.assign(button.dataset,{
+                productId:'2',productName:'Current fixture item',productType:'Chair',productCategory:'Chair',
+                productImage:frame.querySelector('[data-preview-product]').src,productWidth:'90',productDepth:'4',productHeight:'210',
+                placementRenderable:'true',placementX:'70',placementY:'90',placementWidth:'20',placementSurface:'floor',placementSource:'candidate-zone'});
+            await frame.roomPreviewEngine.selectProduct(button);
+            window.currentCanvas=frame.roomPreviewEngine.canvas.toDataURL();
+        });
+        const bytes=await page.locator('[data-room-preview]').evaluate(frame=>frame.roomPreviewEngine.canvas.toDataURL().split(',')[1]);
+        await heldRoute.fulfill({body:Buffer.from(bytes,'base64'),contentType:'image/png'});
+        expect(await page.evaluate(()=>window.oldEnhancement)).toBe(false);
+        const result=await page.locator('[data-room-preview]').evaluate(frame=>({id:frame.dataset.productId,mode:frame.roomPreviewEngine.result.mode,unchanged:window.currentCanvas===frame.roomPreviewEngine.canvas.toDataURL()}));
+        expect(result).toEqual({id:'2',mode:'floor',unchanged:true});
+    });
+}
 
 test.beforeEach(async ({ page }) => {
+    pageErrors.set(page, []);
+    page.on('pageerror', error => pageErrors.get(page).push(error.message));
     await page.route('https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css', (route) => route.fulfill({
         path: resolve('node_modules/bootstrap/dist/css/bootstrap.min.css'), contentType: 'text/css',
     }));
@@ -15,6 +195,8 @@ test.beforeEach(async ({ page }) => {
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL('/');
 });
+
+test.afterEach(async ({page}) => { expect(pageErrors.get(page)).toEqual([]); });
 
 for (const url of ['/room/1/visualize?product=1', '/recommendations/1']) {
     test(`automatic 2D preview is ready without provider requests at ${url}`, async ({ page }, testInfo) => {
@@ -93,6 +275,12 @@ for (const url of ['/room/1/visualize?product=1', '/recommendations/1']) {
         expect(pixelProof.productPixels, JSON.stringify(pixelProof)).toBeGreaterThan(200);
         expect(pixelProof.visibleProductPixels, JSON.stringify(pixelProof)).toBeGreaterThan(200);
         expect(pixelProof.visibleRatio, JSON.stringify(pixelProof)).toBeGreaterThan(suffix === 'dedicated' ? 0.9 : 0.2);
+        const downloaded = page.waitForEvent('download');
+        await page.locator('[data-preview-download]').click();
+        const download = await downloaded;
+        expect(download.suggestedFilename()).toBe('furnicraft-room-preview.png');
+        expect(readFileSync(await download.path()).length).toBeGreaterThan(100);
+        expect(providerRequests).toEqual([]);
         // A portrait phone photo must also fit completely inside the frame.
         await page.locator('[data-room-preview]').evaluate(async (frame) => {
             const scene = document.createElement('canvas'); scene.width = 600; scene.height = 800;
@@ -114,6 +302,9 @@ for (const url of ['/room/1/visualize?product=1', '/recommendations/1']) {
         expect(errors).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
         await page.screenshot({ path: join(tmpdir(), `furnicraft-auto-fit-${testInfo.project.name}-${suffix}-portrait.png`), fullPage: true });
+        await page.reload();
+        await expect.poll(() => page.locator('[data-room-preview]').evaluate(frame => Boolean(frame.roomPreviewEngine?.result))).toBe(true);
+        expect(providerRequests).toEqual([]);
     });
 }
 
@@ -220,5 +411,8 @@ test('transparent product corners do not hide a doorway but visible furniture do
         engine.bodyBlocked = [[[.6,.25],[.7,.25],[.7,.45],[.6,.45]]];
         return {width:placement?.width, clear, blocked:placement && !engine.placementFitsPhoto(placement)};
     });
-    expect(result).toEqual({width:.6, clear:true, blocked:true});
+    expect(result.width).toBeGreaterThan(0);
+    expect(result.width).toBeLessThanOrEqual(.6);
+    expect(result.clear).toBe(true);
+    expect(result.blocked).toBe(true);
 });

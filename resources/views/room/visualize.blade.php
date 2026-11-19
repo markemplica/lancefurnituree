@@ -88,7 +88,7 @@
         <div class="alert {{ $roomImage->analysis_status === 'failed' ? 'alert-warning' : 'alert-light' }} fc-alert" role="status" aria-live="polite" data-room-analysis-watch="{{ route('room.analysis-status', $roomImage) }}" data-room-analysis-current="{{ $roomImage->analysis_status }}">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div><strong data-room-analysis-label>{{ $analysisLabel }}</strong><div class="small text-muted" data-room-analysis-message>{{ $roomImage->analysis_error ?: ($analysisRunning ? 'You may keep this page open; the final analysis will appear automatically.' : 'Placement confidence and detected room zones are shown below.') }}</div></div>
-                @if(!$analysisRunning && !auth()->user()->isAdmin() && $roomImage->gemini_consent_at && !$hasAiRoomFit)
+                @if(!$analysisRunning && !auth()->user()->isAdmin() && $roomImage->gemini_consent_at)
                     <form method="POST" action="{{ route('room.reanalyze', $roomImage) }}">@csrf<button class="btn btn-sm btn-outline-primary" type="submit">Re-analyze room</button></form>
                 @endif
             </div>
@@ -128,7 +128,7 @@
                 @if($roomImage->gemini_consent_at)
                 <button type="button" class="btn btn-outline-primary" data-preview-retry>{{ $previewV2Enabled ? 'Enhance preview with AI' : 'Check visual placement with AI' }}</button>
                 @endif
-            <button type="button" class="btn btn-primary" data-preview-download>Download preview (PNG)</button>
+            <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
             <a class="btn btn-outline-secondary" href="{{ route('preferences.edit',['room'=>$roomImage->id]) }}#room-preview">Upload another photo</a>
         </div>
             <p class="automatic-placement-note">Preview is an estimate, not a measurement. Verify actual dimensions with Lance Furniture Shop before reserving.</p>

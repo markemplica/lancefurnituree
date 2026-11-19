@@ -22,8 +22,6 @@
     <div>
         <p class="section-kicker">Step 3 · Your ranked matches</p>
         <h1>{{ ucfirst(strtolower($recommendation->furniture_type ?: 'Furniture')) }} options selected for your room.</h1>
-        <p class="ai-match-summary">We compared your room, style, preferred materials, finish, and budget to rank active catalog choices. Catalog listings do not confirm physical availability at Lance Furniture Shop.</p>
-        <span class="small text-muted">{{ $recommendation->furniture_type ? $recommendation->furniture_type.' only' : 'Active catalog furniture' }} · Ranked by room fit and preferences · Summary created locally by FurniCraft</span>
     </div>
     <a class="btn btn-outline-dark" href="{{ route('preferences.edit') }}">Adjust room &amp; preferences</a>
 </header>
@@ -60,7 +58,7 @@
 <p>No active alternatives are available for this furniture type.</p>
 @endif
 </div>
-@include('recommendations._chat')</section>
+ </section>
 @endif
 @if($room && $previewProduct)
     <section class="comparison-panel recommendation-inline-preview" id="ai-room-preview" aria-labelledby="inline-preview-heading">
@@ -90,7 +88,6 @@
                 </div>
             </article>
 
-@include('recommendations._chat')
         </aside>
 
         <div class="inline-preview-visual">
@@ -102,6 +99,9 @@
                 <span class="preview-status"><i aria-hidden="true"></i> Planning preview</span>
             </header>
 
+            <div data-room-analysis-watch="{{ route('room.analysis-status', $room) }}" data-room-analysis-current="{{ $room->analysis_status }}">
+                <span class="small text-muted" data-room-analysis-message></span>
+            </div>
             <div class="placement-status" aria-live="polite">
                 <div><span class="room-label">Furniture selected for this preview</span><strong data-inline-preview-name>{{ $previewProduct->name }}</strong></div>
                 <span><span data-placement-status>{{ $initialPlacementStatus }}</span><br><span data-placement-dimensions></span></span>
@@ -115,7 +115,7 @@
                 data-visual-scale-policy='@json(config("roompreview.visual_scale"))'
                 data-product-id="{{ $previewProduct->id }}" data-product-name="{{ $previewProduct->name }}"
                 data-product-width="{{ $previewProduct->width_cm }}" data-product-depth="{{ $previewProduct->depth_cm }}" data-product-height="{{ $previewProduct->height_cm }}" data-product-dimensions-estimated="{{ $previewProduct->dimensions_estimated ? 'true' : 'false' }}"
-                data-product-type="{{ $previewProduct->recommendationType() }}" data-product-category="{{ $previewProduct->category }}"
+                data-product-type="{{ $previewProduct->recommendationType() }}" data-product-category="{{ $previewProduct->category }}" data-room-id="{{ $room->id }}"
                 data-initial-x="{{ data_get($previewPlacement,'x_percent',50) }}" data-initial-y="{{ data_get($previewPlacement,'y_percent',86) }}"
                 data-initial-width="{{ data_get($previewPlacement,'max_width_percent',65) }}" data-initial-quad='@json(data_get($previewPlacement,"quad_percent"))'
                 data-confidence="{{ data_get($previewPlacement,'confidence','low') }}" data-placement-source="{{ data_get($previewPlacement,'source','safe-fallback') }}"
@@ -141,12 +141,19 @@
             @unless($room->gemini_consent_at)
             <p class="small text-muted">Automatic visual sizing is active. For AI room analysis, upload the photo again and allow {{ \App\Services\AiProvider::label() }} to analyze it.</p>
             @endunless
+            @if($previewIsDoor)
+            <div class="manual-door-placement" data-manual-door-placement>
+                <button type="button" class="btn btn-sm btn-outline-dark" data-manual-door-mark aria-pressed="false">Mark doorway corners</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-manual-door-reset hidden>Reset marked corners</button>
+                <p class="small text-muted mb-0" data-manual-door-instructions role="status" aria-live="polite">If the automatic fit is unavailable, mark the doorway on the photo. This visual estimate stays in this browser.</p>
+            </div>
+            @endif
             <div class="room-preview-actions">
                 @if($room->gemini_consent_at)
                 <button type="button" class="btn btn-outline-primary" data-preview-retry>Retry AI preview</button>
                 @endif
-                <button type="button" class="btn btn-primary" data-preview-download>Download preview (PNG)</button>
-                <form method="POST" action="{{ route('room.reanalyze',$room) }}">@csrf<button class="btn btn-outline-secondary" type="submit">Try again</button></form>
+                <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
+                <form method="POST" action="{{ route('room.reanalyze',$room) }}">@csrf<button class="btn btn-outline-secondary" type="submit">Re-analyze room</button></form>
                 <a class="btn btn-outline-secondary" href="{{ route('preferences.edit',['room'=>$room->id]) }}#room-preview">Upload another photo</a>
             </div>
             <p class="automatic-placement-note">Preview is an estimate, not a measurement. Verify actual dimensions with Lance Furniture Shop before reserving.</p>
@@ -195,7 +202,7 @@
                             <input type="hidden" name="furniture_product_id" value="{{ $item->product->id }}">
                             <input type="hidden" name="recommendation_id" value="{{ $recommendation->id }}">
                             <input class="form-control form-control-sm" type="datetime-local" name="preferred_visit_at" min="{{ now()->format('Y-m-d\\TH:i') }}" aria-label="Preferred visit date and time">
-                            @include('reservations._customization-fields', ['formSuffix' => 'recommendation-'.$item->product->id])<button class="btn btn-sm btn-primary">Reserve</button>
+                            @include('reservations._customization-fields', ['formSuffix' => 'recommendation-'.$item->product->id, 'floating' => true])<button class="btn btn-sm btn-primary">Reserve</button>
                         </form>
                     </div>
                 </article>
@@ -203,7 +210,6 @@
         </div>
     </section>
     @endif
-
-
 </div>
+@include('recommendations._floating-chat')
 @endsection
