@@ -11,31 +11,31 @@ use Illuminate\Support\Str;
 class DiningCollectionSeeder extends Seeder
 {
     public const PRODUCTS = [
-        ['d001', 'Yakap Cream Cushion Dining Set', 'Modern', 'Narra Look', 'A rectangular wooden table with a pedestal base and cream upholstered wraparound dining chairs.'],
-        ['d002', 'Guhit Gold Inlay Dining Set', 'Modern', 'Chocolate Brown', 'A glass-topped rectangular table with contrasting golden stripes, tall panel-backed chairs, and light upholstered seats.'],
-        ['d003', 'Hagdan Classic Dining Set', 'Classic', 'Narra Look', 'A glass-topped wooden table with ladder-back chairs and light upholstered seats.'],
-        ['d004', 'Arko Curved Back Dining Set', 'Modern', 'Narra Look', 'A rectangular glass-topped table paired with curved wraparound wooden chair backs and solid wooden seats.'],
-        ['d005', 'Arko Dark Glass Dining Set', 'Modern', 'Chocolate Brown', 'A dark rectangular glass-topped table with curved wraparound chair backs and solid wooden seats.'],
-        ['d006', 'Haligi Black Slat Dining Set', 'Modern', 'Chocolate Brown', 'A dark glass-topped table with tall wooden chair frames and contrasting black vertical back slats.'],
-        ['d007', 'Sinag Vertical Slat Dining Set', 'Classic', 'Narra Look', 'A glass-topped rectangular table paired with tall wooden chairs featuring open vertical slat backs.'],
-        ['d008', 'Guhit Amber and Black Dining Set', 'Modern', 'Narra Look / Black', 'An amber-toned glass-topped table with black accent stripes and tall chairs with black vertical back slats.'],
-        ['d009', 'Hagdan Black Accent Dining Set', 'Modern', 'Narra Look / Black', 'An amber-toned glass-topped table with black stripes and ladder-back chairs with contrasting black horizontal slats.'],
-        ['d010', 'Tahanan Rounded Edge Dining Set', 'Classic', 'Mahogany', 'A glossy reddish-brown table with rounded corners and tall matching wooden ladder-back chairs.'],
-        ['d011', 'Haligi Dark Accent Dining Set', 'Modern', 'Mahogany', 'A reddish-brown rectangular wooden table paired with tall chairs featuring black vertical back accents.'],
-        ['d012', 'Dalisay White Two-Tone Dining Set', 'Modern', 'White / Chocolate Brown', 'A white and dark-brown dining set with a glass-topped striped table and tall contrasting panel-back chairs.'],
-        ['d013', 'Hiraya Ladder Back Dining Set', 'Classic', 'Narra Look', 'A warm amber rectangular table and tall wooden ladder-back chairs, with grooved details on the table legs.'],
-        ['d014', 'Hiraya Classic Dining Set', 'Classic', 'Narra Look', 'A warm amber rectangular table with straight legs, grooved accents, and matching tall wooden ladder-back chairs.'],
-        ['d015', 'Piging Gloss Dining Set', 'Classic', 'Mahogany', 'A glossy deep reddish-brown rectangular table with rounded corners and matching tall wooden ladder-back chairs.'],
-        ['d016', 'Salo Rounded Corner Dining Set', 'Classic', 'Mahogany', 'A glossy deep reddish-brown table with rounded corners, grooved leg details, and tall wooden ladder-back chairs.'],
-        ['d017', 'Silahis Gold Panel Dining Set', 'Modern', 'Chocolate Brown', 'A glossy dark wooden table with rounded corners and tall chairs featuring contrasting golden center panels.'],
-        ['d018', 'Dapit Black and Amber Dining Set', 'Modern', 'Narra Look / Black', 'A glass-topped table with black stripes and black chair frames surrounding amber vertical back slats.'],
+        ['d001', 'Yakap Cream Cushion Dining Set', 'Modern', 'Narra Look', 'A rectangular wooden table with a pedestal base and cream upholstered wraparound dining chairs.', 16500],
+        ['d002', 'Guhit Gold Inlay Dining Set', 'Modern', 'Chocolate Brown', 'A glass-topped rectangular table with contrasting golden stripes, tall panel-backed chairs, and light upholstered seats.', 17500],
+        ['d003', 'Hagdan Classic Dining Set', 'Classic', 'Narra Look', 'A glass-topped wooden table with ladder-back chairs and light upholstered seats.', 15000],
+        ['d004', 'Arko Curved Back Dining Set', 'Modern', 'Narra Look', 'A rectangular glass-topped table paired with curved wraparound wooden chair backs and solid wooden seats.', 16000],
+        ['d005', 'Arko Dark Glass Dining Set', 'Modern', 'Chocolate Brown', 'A dark rectangular glass-topped table with curved wraparound chair backs and solid wooden seats.', 16000],
+        ['d006', 'Haligi Black Slat Dining Set', 'Modern', 'Chocolate Brown', 'A dark glass-topped table with tall wooden chair frames and contrasting black vertical back slats.', 15500],
+        ['d007', 'Sinag Vertical Slat Dining Set', 'Classic', 'Narra Look', 'A glass-topped rectangular table paired with tall wooden chairs featuring open vertical slat backs.', 15000],
+        ['d008', 'Guhit Amber and Black Dining Set', 'Modern', 'Narra Look / Black', 'An amber-toned glass-topped table with black accent stripes and tall chairs with black vertical back slats.', 17000],
+        ['d009', 'Hagdan Black Accent Dining Set', 'Modern', 'Narra Look / Black', 'An amber-toned glass-topped table with black stripes and ladder-back chairs with contrasting black horizontal slats.', 16000],
+        ['d010', 'Tahanan Rounded Edge Dining Set', 'Classic', 'Mahogany', 'A glossy reddish-brown table with rounded corners and tall matching wooden ladder-back chairs.', 16500],
+        ['d011', 'Haligi Dark Accent Dining Set', 'Modern', 'Mahogany', 'A reddish-brown rectangular wooden table paired with tall chairs featuring black vertical back accents.', 17000],
+        ['d012', 'Dalisay White Two-Tone Dining Set', 'Modern', 'White / Chocolate Brown', 'A white and dark-brown dining set with a glass-topped striped table and tall contrasting panel-back chairs.', 17500],
+        ['d013', 'Hiraya Ladder Back Dining Set', 'Classic', 'Narra Look', 'A warm amber rectangular table and tall wooden ladder-back chairs, with grooved details on the table legs.', 15000],
+        ['d014', 'Hiraya Classic Dining Set', 'Classic', 'Narra Look', 'A warm amber rectangular table with straight legs, grooved accents, and matching tall wooden ladder-back chairs.', 15500],
+        ['d015', 'Piging Gloss Dining Set', 'Classic', 'Mahogany', 'A glossy deep reddish-brown rectangular table with rounded corners and matching tall wooden ladder-back chairs.', 17000],
+        ['d016', 'Salo Rounded Corner Dining Set', 'Classic', 'Mahogany', 'A glossy deep reddish-brown table with rounded corners, grooved leg details, and tall wooden ladder-back chairs.', 16500],
+        ['d017', 'Silahis Gold Panel Dining Set', 'Modern', 'Chocolate Brown', 'A glossy dark wooden table with rounded corners and tall chairs featuring contrasting golden center panels.', 17500],
+        ['d018', 'Dapit Black and Amber Dining Set', 'Modern', 'Narra Look / Black', 'A glass-topped table with black stripes and black chair frames surrounding amber vertical back slats.', 17000],
     ];
 
     public function run(): void
     {
         $admin = User::where('role', 'admin')->orderBy('id')->first();
         DB::transaction(function () use ($admin): void {
-            foreach (self::PRODUCTS as [$source, $name, $style, $finish, $description]) {
+            foreach (self::PRODUCTS as [$source, $name, $style, $finish, $description, $price]) {
                 $slug = Str::slug($name);
                 $image = 'catalog-'.$slug.'.png';
                 if (! is_file(public_path('images/catalog/'.$image))) {
@@ -49,7 +49,7 @@ class DiningCollectionSeeder extends Seeder
                     'wood_type' => 'To be confirmed',
                     'varnish_finish' => $finish,
                     'style' => $style,
-                    'price' => 1000,
+                    'price' => $price,
                     'width_cm' => 180,
                     'depth_cm' => 90,
                     'height_cm' => 76,

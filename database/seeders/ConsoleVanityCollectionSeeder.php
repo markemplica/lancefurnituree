@@ -24,17 +24,17 @@ class ConsoleVanityCollectionSeeder extends Seeder
     {
         $admin = User::where('role', 'admin')->orderBy('id')->first();
         $products = [
-            ['Royal Crest Vanity Set', 'Traditional', 'A vanity set with a tall carved crest mirror, two upper glass-front cabinets, lower storage cabinets and drawers, and a matching wooden stool.', ['vanity', 'mirror', 'carved crest', 'glass cabinets', 'stool']],
-            ['Haligi Classic Console and Mirror Set', 'Classic', 'A console and rectangular mirror set with grooved mirror uprights, shaped pedestal supports, and a broad lower shelf.', ['console', 'rectangular mirror', 'pedestal', 'lower shelf']],
-            ['Luna Round Mirror Console Set', 'Modern', 'A round framed mirror paired with a console table featuring sweeping U-shaped supports and a stepped base.', ['console', 'round mirror', 'curved base', 'u-shaped']],
-            ['Imperial Scroll Console and Mirror Set', 'Traditional', 'An ornate rectangular mirror and console set with carved scrolls, floral details, three drawers, curved legs, and a lower shelf.', ['console', 'mirror', 'scrollwork', 'carved', 'three drawers']],
-            ['Royal Blossom Console and Mirror Set', 'Traditional', 'A floral crest mirror and console set with open scrollwork, a carved floral apron, curved legs, and a lower shelf.', ['console', 'mirror', 'floral', 'carved', 'curved legs']],
-            ['Tahanan Six-Drawer Dresser with Mirror', 'Classic', 'A dresser with six drawers arranged in two columns, metal-tone handles, and a matching rectangular framed mirror.', ['dresser', 'mirror', 'six drawers', 'storage']],
-            ['Reyna Curving Vanity Set', 'Traditional', 'A vanity set with a shaped crest mirror, five drawers, carved scroll details, curved legs, and a matching cream upholstered stool.', ['vanity', 'mirror', 'curving', 'five drawers', 'upholstered stool']],
+            ['Royal Crest Vanity Set', 'Traditional', 'A vanity set with a tall carved crest mirror, two upper glass-front cabinets, lower storage cabinets and drawers, and a matching wooden stool.', 'Mahogany', 13000, ['vanity', 'mirror', 'carved crest', 'glass cabinets', 'stool']],
+            ['Haligi Classic Console and Mirror Set', 'Classic', 'A console and rectangular mirror set with grooved mirror uprights, shaped pedestal supports, and a broad lower shelf.', 'Gmelina', 11000, ['console', 'rectangular mirror', 'pedestal', 'lower shelf']],
+            ['Luna Round Mirror Console Set', 'Modern', 'A round framed mirror paired with a console table featuring sweeping U-shaped supports and a stepped base.', 'Gmelina', 10000, ['console', 'round mirror', 'curved base', 'u-shaped']],
+            ['Imperial Scroll Console and Mirror Set', 'Traditional', 'An ornate rectangular mirror and console set with carved scrolls, floral details, three drawers, curved legs, and a lower shelf.', 'Mahogany', 13000, ['console', 'mirror', 'scrollwork', 'carved', 'three drawers']],
+            ['Royal Blossom Console and Mirror Set', 'Traditional', 'A floral crest mirror and console set with open scrollwork, a carved floral apron, curved legs, and a lower shelf.', 'Mahogany', 12000, ['console', 'mirror', 'floral', 'carved', 'curved legs']],
+            ['Tahanan Six-Drawer Dresser with Mirror', 'Classic', 'A dresser with six drawers arranged in two columns, metal-tone handles, and a matching rectangular framed mirror.', 'Gmelina', 11500, ['dresser', 'mirror', 'six drawers', 'storage']],
+            ['Reyna Curving Vanity Set', 'Traditional', 'A vanity set with a shaped crest mirror, five drawers, carved scroll details, curved legs, and a matching cream upholstered stool.', 'Mahogany', 12500, ['vanity', 'mirror', 'curving', 'five drawers', 'upholstered stool']],
         ];
 
         DB::transaction(function () use ($products, $admin): void {
-            foreach ($products as [$name, $style, $description, $tags]) {
+            foreach ($products as [$name, $style, $description, $woodType, $price, $tags]) {
                 $slug = Str::slug($name);
                 $image = 'catalog-'.$slug.'-updated.png';
                 if (! is_file(public_path('images/catalog/'.$image))) {
@@ -44,11 +44,11 @@ class ConsoleVanityCollectionSeeder extends Seeder
                 $product = FurnitureProduct::updateOrCreate(['slug' => $slug], [
                     'name' => $name,
                     'category' => 'Console',
-                    'description' => $description.' The pictured warm amber color is classified as Narra Look for catalog browsing; actual wood species and varnish must be confirmed with Lance Furniture Shop. Displayed dimensions are standard planning estimates for the main furniture unit with mirror, not measured dimensions. Confirm the overall size and included pieces with the shop.',
-                    'wood_type' => 'To be confirmed',
+                    'description' => $description.' The pictured warm amber color is classified as Narra Look for catalog browsing. Confirm the varnish finish, overall size, and included pieces with Lance Furniture Shop; displayed dimensions are planning estimates for the main furniture unit with mirror.',
+                    'wood_type' => $woodType,
                     'varnish_finish' => 'Narra Look',
                     'style' => $style,
-                    'price' => 1000,
+                    'price' => $price,
                     'width_cm' => 120,
                     'depth_cm' => 45,
                     'height_cm' => 180,

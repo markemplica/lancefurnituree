@@ -27,6 +27,7 @@
 </header>
 
 <p class="small text-muted">Current filters: PHP {{ number_format($recommendation->preference->budget_min, 2) }}–{{ number_format($recommendation->preference->budget_max, 2) }} · {{ $recommendation->preference->wood_type ?: 'Any wood' }} · {{ $recommendation->preference->style ?: 'Any style' }} · {{ $recommendation->preference->varnish_finish ?: 'Any finish' }}</p><x-workflow-progress :step="3" />
+<p class="small text-muted">Summary created locally by FurniCraft from your saved preferences and catalog matches.</p>
 
 <div class="ai-matches-dashboard {{ !$previewProduct ? 'has-no-exact-matches' : '' }}">
 @if(!$previewProduct)
@@ -149,12 +150,7 @@
             </div>
             @endif
             <div class="room-preview-actions">
-                @if($room->gemini_consent_at)
-                <button type="button" class="btn btn-outline-primary" data-preview-retry>Retry AI preview</button>
-                @endif
                 <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
-                <form method="POST" action="{{ route('room.reanalyze',$room) }}">@csrf<button class="btn btn-outline-secondary" type="submit">Re-analyze room</button></form>
-                <a class="btn btn-outline-secondary" href="{{ route('preferences.edit',['room'=>$room->id]) }}#room-preview">Upload another photo</a>
             </div>
             <p class="automatic-placement-note">Preview is an estimate, not a measurement. Verify actual dimensions with Lance Furniture Shop before reserving.</p>
         </div>

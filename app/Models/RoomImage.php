@@ -28,6 +28,6 @@ class RoomImage extends Model
             ->where(function ($query) {
                 $query->where('analysis_requested_at', '<', now()->subMinutes(15))
                     ->orWhere(fn ($q) => $q->whereNull('analysis_requested_at')->where('updated_at', '<', now()->subMinutes(15)));
-            })->update(['analysis_status' => 'failed', 'analysis_error' => 'Room analysis timed out. Local guidance remains available. You can choose Re-analyze room to try again.']);
+            })->update(['analysis_status' => 'failed', 'analysis_error' => 'Room analysis timed out. Local guidance remains available. Choose another saved photo or upload a clearer photo from Plan your room.']);
     }
 }

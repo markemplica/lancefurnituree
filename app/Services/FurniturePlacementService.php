@@ -85,7 +85,7 @@ class FurniturePlacementService
             return $this->blockedPlacement(
                 $preferredSurface,
                 $detected ? 'missing-door-corners' : 'no-opening',
-                $detected ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Reuse this saved photo and choose Re-analyze room to obtain usable corners.' : 'No reliable doorway opening was detected. FurniCraft will not place a door at an invented position; re-analyze a clearer photo that shows the full frame.',
+                $detected ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Choose a clearer photo showing the full doorway to obtain usable corners.' : 'No reliable doorway opening was detected. FurniCraft will not place a door at an invented position; choose a clearer photo that shows the full frame.',
                 $measurement,
             );
         }

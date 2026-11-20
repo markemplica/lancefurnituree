@@ -35,6 +35,7 @@
         <p class="section-kicker">Your room, reimagined</p>
         <h1>See <span data-preview-name>{{ $selectedProduct?->name ?? 'furniture' }}</span> in your space.</h1>
         <p class="room-compare-intro">{{ $hasAiRoomFit ? 'AI-guided visual estimate. Confirm dimensions with the shop.' : 'Estimated 2D fit from your room photo. Confirm dimensions with the shop.' }}</p>
+        <p class="small text-muted">The exact catalog image is placed automatically in a 2D preview.</p>
 
 
 
@@ -66,7 +67,7 @@
 
     <section class="comparison-panel" aria-labelledby="comparison-heading">
         <header class="comparison-panel-head">
-            <div><span class="room-label">2D placement preview</span><h2 id="comparison-heading">2D room preview</h2></div>
+            <div><span class="room-label">2D placement preview</span><h2 id="comparison-heading">Automatic 2D room preview</h2></div>
             <span class="preview-status"><i aria-hidden="true"></i> Planning preview</span>
         </header>
 
@@ -74,9 +75,6 @@
         <div class="alert {{ $roomImage->analysis_status === 'failed' ? 'alert-warning' : 'alert-light' }} fc-alert" role="status" aria-live="polite" data-room-analysis-watch="{{ route('room.analysis-status', $roomImage) }}" data-room-analysis-current="{{ $roomImage->analysis_status }}">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div><strong data-room-analysis-label>{{ $analysisLabel }}</strong><div class="small text-muted" data-room-analysis-message>{{ $roomImage->analysis_error ?: ($analysisRunning ? 'Analysis will update automatically.' : 'Placement details are below.') }}</div></div>
-                @if(!$analysisRunning && !auth()->user()->isAdmin() && $roomImage->gemini_consent_at)
-                    <form method="POST" action="{{ route('room.reanalyze', $roomImage) }}">@csrf<button class="btn btn-sm btn-outline-primary" type="submit">Re-analyze room</button></form>
-                @endif
             </div>
         </div>
 <div class="placement-status" aria-live="polite">
@@ -89,6 +87,9 @@
                 <button type="button" class="btn btn-sm btn-outline-dark" data-manual-door-mark aria-pressed="false">Mark doorway corners</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-manual-door-reset hidden>Reset marked corners</button>
                 <p class="small text-muted mb-0" data-manual-door-instructions role="status" aria-live="polite">{{ $hasPlacement ? 'A door placement is available. Mark its four corners to adjust the fit manually.' : 'If AI cannot confirm the doorway, mark its four room-facing corners: top-left, top-right, bottom-right, then bottom-left.' }} This visual estimate stays in this browser.</p>
+                @unless($hasPlacement)
+                    <p class="small text-muted">No door has been placed because a complete doorway could not be confirmed.</p>
+                @endunless
             </div>
         @endif
 
@@ -121,7 +122,6 @@
         <div class="preview-detection-row" data-preview-detections aria-live="polite"></div>
         <div class="room-preview-actions">
             <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
-            <a class="btn btn-outline-secondary" href="{{ route('preferences.edit',['room'=>$roomImage->id]) }}#room-preview">Upload another photo</a>
         </div>
             <p class="automatic-placement-note">Preview is an estimate, not a measurement. Verify actual dimensions with Lance Furniture Shop before reserving.</p>
 

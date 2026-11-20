@@ -1240,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeAnalysisStatuses = ['queued', 'processing', 'retrying'];
     const watchRoomAnalysis = (analysisWatches) => {
     if (analysisWatches.some((element) => activeAnalysisStatuses.includes(element.dataset.roomAnalysisCurrent || (element.dataset.roomReady === 'true' ? 'completed' : 'queued')))) {
-        const labels = { queued: 'Room analysis queued', processing: 'Analyzing room image', retrying: 'AI temporarily unavailable · retrying', completed: 'AI analyzed', fallback: 'Local guidance', failed: 'Needs retry' };
+        const labels = { queued: 'Room analysis queued', processing: 'Analyzing room image', retrying: 'AI temporarily unavailable · retrying', completed: 'AI analyzed', fallback: 'Local guidance', failed: 'Needs attention' };
         const poll = async () => {
             for (const element of analysisWatches) {
                 if (!element.isConnected) continue;
@@ -1255,8 +1255,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const payload = await response.json();
                     if (payload.product_id && watchedFrame && String(payload.product_id) !== watchedFrame.dataset.productId) continue;
                     element.dataset.roomAnalysisCurrent = payload.status;
-                    const retry = element.querySelector('[data-room-retry]');
-                    if (retry) retry.disabled = activeAnalysisStatuses.includes(payload.status);
                     element.dataset.roomReady = String(Boolean(payload.ready));
                     if (roomPicker && element.dataset.roomId === roomPicker.value) {
                         roomPicker.dispatchEvent(new Event('change'));
@@ -1297,50 +1295,6 @@ document.addEventListener('DOMContentLoaded', () => {
         startBoundedPoll(poll, () => analysisWatches.some(element => !element.dataset.pollingStopped && activeAnalysisStatuses.includes(element.dataset.roomAnalysisCurrent || (element.dataset.roomReady === 'true' ? 'completed' : 'queued'))));
     }
     };
-    document.addEventListener('submit', async (event) => {
-        const form = event.target.closest('form[data-room-reanalyze]');
-        if (!form) return;
-
-        event.preventDefault();
-        const option = form.closest('[data-room-analysis-watch]');
-        const button = form.querySelector('[data-room-retry]');
-        const message = option?.querySelector('[data-room-analysis-message]');
-        if (!option || !button || button.disabled) return;
-
-        button.disabled = true;
-        button.dataset.originalLabel ??= button.textContent.trim();
-        button.textContent = 'Requesting…';
-        if (message) message.textContent = 'Sending the re-analysis request…';
-
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: new FormData(form),
-                signal: AbortSignal.timeout(20000),
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload.message || 'The room could not be re-analyzed. Please try again.');
-
-            const status = payload.status || 'queued';
-            const labels = { queued: 'Room analysis queued', processing: 'Analyzing room image', retrying: 'AI temporarily unavailable · retrying', completed: 'AI analyzed', fallback: 'Local guidance', failed: 'Needs retry' };
-            // Fetch the authoritative status once more even if a queue worker finished
-            // before the POST returned, so the room preview can update without a reload.
-            option.dataset.roomAnalysisCurrent = activeAnalysisStatuses.includes(status) ? status : 'queued';
-            option.dataset.roomReady = String(['completed', 'fallback'].includes(status));
-            delete option.dataset.pollingStopped;
-            option.querySelector('[data-room-analysis-label]')?.replaceChildren(document.createTextNode(labels[status] || status));
-            if (message) message.textContent = payload.message || (activeAnalysisStatuses.includes(status) ? 'Room analysis is in progress.' : 'Room analysis status updated.');
-            button.disabled = true;
-            button.textContent = button.dataset.originalLabel;
-
-            watchRoomAnalysis([option]);
-        } catch (error) {
-            button.disabled = false;
-            button.textContent = button.dataset.originalLabel;
-            if (message) message.textContent = error.message || 'Could not send the re-analysis request. Please try again.';
-        }
-    });
     watchRoomAnalysis([...document.querySelectorAll('[data-room-analysis-watch]')]);
     const previewWatches = [...document.querySelectorAll('[data-preview-watch]')];
     const activePreviewStatuses = ['queued', 'processing', 'retrying'];
@@ -1373,7 +1327,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const close = recommendationChat.querySelector('[data-chat-close]');
         const log = recommendationChat.querySelector('[data-chat-log]');
         const form = recommendationChat.querySelector('[data-chat-form]');
-        const storageKey = recommendationChat.dataset.chatStorageKey;
+        const messageField = form.querySelector('[name="message"]');
+        const submitButton = form.querySelector('button[type="submit"]');
 
         const setChatOpen = (open, focusPanel = true) => {
             panel.hidden = !open;
@@ -1394,16 +1349,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 setChatOpen(false);
             }
         });
-        form.addEventListener('submit', () => {
-            try { sessionStorage.setItem(storageKey, 'open'); } catch (error) { /* Chat still submits if storage is unavailable. */ }
-        });
+        const appendChatMessage = (role, message, source = '') => {
+            log.querySelector('.chat-empty')?.remove();
+            const bubble = document.createElement('div');
+            bubble.className = `chat-message ${role}`;
+            const name = document.createElement('strong');
+            name.textContent = role === 'user' ? 'You' : 'FurniCraft';
+            bubble.append(name);
 
-        try {
-            if (sessionStorage.getItem(storageKey) === 'open') {
-                sessionStorage.removeItem(storageKey);
-                setChatOpen(true, false);
+            if (source) {
+                const sourceLabel = document.createElement('small');
+                sourceLabel.className = 'd-block text-muted';
+                sourceLabel.textContent = ({
+                    gemini: 'Gemini response',
+                    'catalog-rule': 'Current catalog answer',
+                    'local-fallback': 'Local catalog fallback',
+                })[source] || 'Local response';
+                bubble.append(sourceLabel);
             }
-        } catch (error) { /* Chat remains available when storage is unavailable. */ }
+
+            const text = document.createElement('div');
+            text.textContent = message;
+            bubble.append(text);
+            log.append(bubble);
+            log.scrollTop = log.scrollHeight;
+            return bubble;
+        };
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (form.dataset.submitting === 'true' || !form.reportValidity()) return;
+
+            const question = messageField.value.trim();
+            if (!question) return;
+            const formData = new FormData(form);
+
+            form.dataset.submitting = 'true';
+            submitButton.disabled = true;
+            messageField.disabled = true;
+            submitButton.textContent = 'Sending…';
+            appendChatMessage('user', question);
+            const pending = appendChatMessage('assistant', 'FurniCraft is replying…');
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    const validationMessage = payload.errors?.message?.[0];
+                    throw new Error(validationMessage || payload.message || 'Your question could not be sent. Please try again.');
+                }
+
+                pending.remove();
+                const notice = ['catalog-rule', 'local-fallback'].includes(payload.source) && payload.notice
+                    ? `\n\n${payload.notice}`
+                    : '';
+                appendChatMessage('assistant', `${payload.message}${notice}`, payload.source);
+                messageField.value = '';
+            } catch (error) {
+                pending.remove();
+                appendChatMessage('assistant', error.message || 'FurniCraft could not reply right now. Please try again.');
+            } finally {
+                form.dataset.submitting = 'false';
+                submitButton.disabled = false;
+                submitButton.textContent = 'Ask FurniCraft';
+                messageField.disabled = false;
+                messageField.focus({ preventScroll: true });
+            }
+        });
     }
 
     document.querySelectorAll('[data-customization-dialog]').forEach((dialog) => {

@@ -4,6 +4,14 @@
 @section('content')
 @php($activeRoomId = (int) old('room_image_id', $selectedRoomId))
 
+<header class="page-heading planner-page-heading">
+    <div>
+        <p class="section-kicker">Room planner</p>
+        <h1>Plan your room.</h1>
+        <p>Choose furniture, set your budget, and optionally add a room photo for a 2D preview.</p>
+    </div>
+</header>
+
 <div class="planning-workspace"><div class="planning-split">
 <section id="room-preview" class="workflow-section" aria-labelledby="room-preview-heading">
     <div class="workflow-section-heading">
@@ -70,7 +78,7 @@
 <div class="planner-settings"><section id="preference-form" class="workflow-section" aria-labelledby="preference-heading">
     <div class="workflow-section-heading">
         <div>
-            <h1 id="preference-heading">Plan your room.</h1><p>Choose your furniture and budget. Add a room photo for an optional preview.</p>
+            <h2 id="preference-heading">Furniture preferences</h2><p>Choose the type, budget, style, wood, and finish you prefer.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
             <span class="workflow-state is-done" data-preference-save-state @if(!$preferenceComplete) hidden @endif>Saved</span>

@@ -23,6 +23,10 @@ class ChatController extends Controller
         $user = $request->user();
         $rateLimitKey = 'chat-daily:'.$user->id;
         if (RateLimiter::tooManyAttempts($rateLimitKey, self::DAILY_MESSAGE_LIMIT)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => "You have reached today's chat limit. Try again tomorrow."], 429);
+            }
+
             return back()->withErrors(['message' => "You have reached today's chat limit. Try again tomorrow."]);
         }
         RateLimiter::hit($rateLimitKey, self::DAILY_MESSAGE_DECAY_SECONDS);
@@ -57,6 +61,15 @@ class ChatController extends Controller
             'catalog-rule' => 'FurniCraft replied using current catalog listings. Physical availability still needs confirmation with Lance Furniture Shop.',
             default => 'FurniCraft replied to your question.',
         };
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $answer['text'],
+                'source' => $source,
+                'notice' => $notice,
+                'preferences_updated' => (bool) $filter && ! isset($filter['needs_clarification']),
+            ]);
+        }
 
         if (isset($filter['needs_clarification'])) {
             return back()->with('success', $answer['text']);

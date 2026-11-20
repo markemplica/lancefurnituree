@@ -1,4 +1,4 @@
-<aside class="recommendation-chat-widget" data-chat-widget data-chat-storage-key="furnicraft-chat-open-{{ $recommendation->id }}">
+<aside class="recommendation-chat-widget" data-chat-widget>
     <section class="recommendation-chat-panel chat-panel" data-chat-panel id="recommendation-chat-panel" aria-labelledby="recommendation-chat-title" role="dialog" hidden>
         <header class="recommendation-chat-head chat-head">
             <div>

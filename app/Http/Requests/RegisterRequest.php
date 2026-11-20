@@ -22,7 +22,7 @@ class RegisterRequest extends FormRequest
             'middle_name' => ['nullable', 'string', 'max:50'],
             'last_name' => ['required', 'string', 'max:50'],
             'birthdate' => ['nullable', 'date_format:Y-m-d', 'before:today'],
-            'gender' => ['nullable', 'string', 'in:male,female,non_binary,prefer_not_to_say'],
+            'gender' => ['nullable', 'string', 'in:male,female'],
             'email' => ['required', 'email', 'max:255', 'unique:users'],
             'phone' => $this->mobileNumberRules(),
             'password' => ['required', 'confirmed', Password::defaults()],

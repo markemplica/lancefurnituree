@@ -1,7 +1,7 @@
                 @php($isSelectedRoom = $activeRoomId === $room->id)
                 @php($roomReady = in_array($room->analysis_status, ['completed', 'fallback'], true))
                 @php($analysisBusy = in_array($room->analysis_status, ['queued', 'processing', 'retrying'], true))
-                @php($statusLabel = ['completed' => 'AI analyzed', 'queued' => 'Queued', 'processing' => 'Analyzing', 'retrying' => 'Retrying', 'failed' => 'Needs retry'][$room->analysis_status] ?? 'Local guidance')
+                @php($statusLabel = ['completed' => 'AI analyzed', 'queued' => 'Queued', 'processing' => 'Analyzing', 'retrying' => 'Retrying', 'failed' => 'Needs attention'][$room->analysis_status] ?? 'Local guidance')
                 <article class="panel room-option mb-3 d-flex flex-column flex-sm-row gap-3 align-items-sm-center {{ $isSelectedRoom ? 'is-selected' : '' }}" data-room-option data-photo-url="{{ route('room-images.original', $room) }}" data-room-id="{{ $room->id }}" data-room-ready="{{ $roomReady ? 'true' : 'false' }}" data-room-analysis-current="{{ $room->analysis_status }}" data-room-analysis-watch="{{ route('room.analysis-status', $room) }}" role="button" tabindex="0" aria-pressed="{{ $isSelectedRoom ? 'true' : 'false' }}" aria-label="Use saved room photo from {{ $room->created_at->copy()->timezone('Asia/Manila')->format('F j, Y g:i A') }} for recommendations">
                     <div class="planning-photo-frame"><span class="planning-photo-placeholder" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M4 8h24v19H4zM4 22l7-7 6 6 4-4 7 7M21 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span>Room photo</span></span><img class="planning-room-thumbnail" loading="lazy" decoding="async" src="{{ route('room-images.thumbnail', $room) }}" alt="Uploaded room from {{ $room->created_at->copy()->timezone('Asia/Manila')->format('M j, Y') }}" width="140" height="100" style="object-fit:cover"></div>
                     <div class="flex-grow-1">
@@ -10,7 +10,6 @@
                         <div class="d-flex flex-wrap gap-2">
 
                             <form method="POST" action="{{ route('room.destroy', $room) }}" data-delete-room>@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" type="submit">Delete photo</button></form>
-                            <form method="POST" action="{{ route('room.reanalyze', $room) }}" data-room-reanalyze>@csrf<button class="btn btn-sm btn-outline-dark" type="submit" data-room-retry @disabled($analysisBusy)>Re-analyze room</button></form>
                         </div>
                     </div>
                 </article>

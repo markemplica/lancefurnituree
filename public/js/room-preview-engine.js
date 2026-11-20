@@ -705,9 +705,8 @@
             this.visibleProductPixelCount = 0;
             if (this.guidance) this.guidance.textContent = '';
             if (this.dimensions) this.dimensions.textContent = '';
-            const enhancementRetryRequested = this.retryAiPreview === true;
-            const enhancementRequested = enhancementRetryRequested || this.frame.dataset.autoEnhance === 'true';
-            this.retryAiPreview = false;
+            const enhancementRetryRequested = false;
+            const enhancementRequested = this.frame.dataset.autoEnhance === 'true';
             this.result = null;
             this.frame.dataset.finalPlacement = '';
             if (this.download) { this.download.disabled = true; this.download.onclick = null; }
@@ -788,13 +787,13 @@
                     this.setStatus(unavailable ? 'Doorway analysis unavailable' : 'No confirmed doorway available', 'low');
                     const detected = this.openings.some(item => /door|entry|entrance|archway|closet|passage/i.test(`${item.type || ''} ${item.label || ''}`) && !/window/i.test(`${item.type || ''} ${item.label || ''}`));
                     if (this.guidance) this.guidance.textContent = detected
-                        ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Reuse this saved photo and choose Re-analyze room; a bounding box alone cannot position the door.'
+                        ? 'A doorway was detected, but its four room-facing fit corners are missing or invalid. Choose a clearer photo showing the full doorway; a bounding box alone cannot position the door.'
                         : unavailable
-                        ? 'The room analysis did not return doorway corners. This does not mean the doorway frame is missing from your photo. Re-analyze this saved photo when AI analysis is available.'
-                        : 'A complete doorway placement was not confirmed, so this door has not been placed. Use a photo showing the full frame from top to floor, then re-analyze when AI is available.';
+                        ? 'The room analysis did not return doorway corners. This does not mean the doorway frame is missing from your photo. Choose a clearer photo showing the complete doorway frame.'
+                        : 'A complete doorway placement was not confirmed, so this door has not been placed. Use a photo showing the full frame from top to floor.';
                 } else {
                     this.setStatus('No validated placement available', 'low');
-                    if (this.guidance) this.guidance.textContent = 'No clear area passed the placement checks. Try a wider photo showing the floor and nearby doors, or re-analyze the room. The product has not been placed over a blocked area.';
+                    if (this.guidance) this.guidance.textContent = 'No clear area passed the placement checks. Choose a wider photo showing the floor and nearby doors. The product has not been placed over a blocked area.';
                 }
                 return;
             }
@@ -1463,15 +1462,6 @@
             frame.roomPreviewEngine = engine;
         });
         document.addEventListener('click', async (event) => {
-            const retryButton = event.target.closest('[data-preview-retry]');
-            if (retryButton) {
-                const engine = document.querySelector('[data-room-preview]')?.roomPreviewEngine;
-                if (!engine || retryButton.disabled) return;
-                retryButton.disabled = true;
-                engine.retryAiPreview = true;
-                try { await engine.start(); } finally { retryButton.disabled = false; }
-                return;
-            }
             const button = event.target.closest('[data-recommendation-preview]');
             if (!button) return;
             const frame = document.querySelector('[data-room-preview]');

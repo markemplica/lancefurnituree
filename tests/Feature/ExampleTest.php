@@ -73,7 +73,7 @@ class ExampleTest extends TestCase
             ->assertSee('consented room-photo analysis, furnished-room preview generation when requested, and chatbot answers');
         $this->actingAs($user)->get(route('preferences.edit'))
             ->assertOk()
-            ->assertSee('Plan your room.')
+            ->assertSee('Plan your room')
             ->assertSee('Generate recommendations')
             ->assertDontSee('AI-powered matching');
         $this->get(route('recommendations.show', $recommendation))
@@ -502,7 +502,7 @@ class ExampleTest extends TestCase
         $this->actingAs($user)->get('/room')->assertRedirect(route('preferences.edit').'#room-preview');
         $this->actingAs($user)->get(route('preferences.edit', ['room' => $room->id]))
             ->assertOk()
-            ->assertSee('Plan your room.')
+            ->assertSee('Plan your room')
             ->assertSee('Furniture type')
             ->assertSee('Room photo')
             ->assertSee('<span data-saved-furniture-type>Table</span>', false)
@@ -826,7 +826,8 @@ class ExampleTest extends TestCase
         $this->assertNotSame($room->id, $cachedRoom->id);
         $this->assertSame('3.80', $cachedRoom->room_width_m);
         $this->assertSame('4.60', $cachedRoom->room_depth_m);
-        Http::assertSentCount(1);
+        // Initial room analysis plus one recovery request for missing placement geometry.
+        Http::assertSentCount(2);
     }
 
     public function test_room_analysis_falls_back_to_local_guidance_when_gemini_rejects_the_request(): void
@@ -1136,7 +1137,8 @@ class ExampleTest extends TestCase
         $this->assertSame('all catalog furniture', $room->analysis['analyzed_furniture_type']);
         $this->assertNotEmpty($room->analysis['openings']);
         $this->assertArrayHasKey('zone_analysis_attempted_at', $room->analysis);
-        Http::assertSentCount(1);
+        // Initial room analysis plus one recovery request for missing doorway geometry.
+        Http::assertSentCount(2);
     }
 
     public function test_placement_service_uses_advisory_automatic_fit_for_legacy_room_analysis(): void

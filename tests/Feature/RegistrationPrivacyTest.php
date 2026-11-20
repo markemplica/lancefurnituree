@@ -54,11 +54,11 @@ class RegistrationPrivacyTest extends TestCase
     public function test_valid_optional_details_can_still_be_saved(): void
     {
         Notification::fake();
-        $this->post('/register', $this->signup(['birthdate' => '2000-01-15', 'gender' => 'prefer_not_to_say']))
+        $this->post('/register', $this->signup(['birthdate' => '2000-01-15', 'gender' => 'female']))
             ->assertRedirect(route('verification.notice'));
         $user = User::where('email', 'privacy-signup@example.test')->firstOrFail();
         $this->assertSame('2000-01-15', $user->birthdate->format('Y-m-d'));
-        $this->assertSame('prefer_not_to_say', $user->gender);
+        $this->assertSame('female', $user->gender);
     }
 
     public static function invalidDemographics(): array
@@ -66,7 +66,7 @@ class RegistrationPrivacyTest extends TestCase
         return [
             'bad date' => [['birthdate' => 'not-a-date'], 'birthdate'],
             'future date' => [['birthdate' => '2999-01-01'], 'birthdate'],
-            'unknown gender' => [['gender' => 'unsupported'], 'gender'],
+            'unsupported gender choice' => [['gender' => 'non_binary'], 'gender'],
             'array gender' => [['gender' => ['female']], 'gender'],
         ];
     }

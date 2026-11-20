@@ -50,8 +50,22 @@ class PreviewVerificationStatusTest extends TestCase
         $gemini->shouldReceive('providerCallCount')->andReturn(0);
         $gemini->shouldReceive('limitProviderRequests')->once()->with(2);
         $gemini->shouldReceive('clearProviderRequestLimit')->once();
-        $room->update(['analysis_status'=>'completed','analysis'=>['gemini_used'=>true,
-            'analyzed_furniture_type'=>'all catalog furniture','placement_profile_version'=>2]]);
+        $room->update(['analysis_status'=>'completed','analysis'=>[
+            'gemini_used' => true,
+            'analyzed_furniture_type' => 'all catalog furniture',
+            'placement_profile_version' => 2,
+            'candidate_zones' => [[
+                'surface' => 'floor',
+                'anchor_x_percent' => 50,
+                'anchor_y_percent' => 86,
+                'max_width_percent' => 55,
+                'suitable_types' => ['Chair'],
+                'clearance_score' => 90,
+                'occlusion_score' => 5,
+                'confidence' => 'high',
+                'reason' => 'Clear floor area.',
+            ]],
+        ]]);
         $gemini->shouldNotReceive('analyzeRoom');
         $gemini->shouldReceive('isConfigured')->andReturn(true);
         if ($failure) {

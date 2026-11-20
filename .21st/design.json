@@ -8,6 +8,14 @@
       "layout": "White record sheet with a brown top rule; product information and image on the left; materials, dimensions and tags on the right; pricing and actions below.",
       "responsive": "Stack the form columns and field labels on phones.",
       "tokens": "Reuse the existing FurniCraft color, typography and spacing tokens."
+    },
+    {
+      "surface": "admin and owner workspace",
+      "direction": "Natural, calm retail administration",
+      "selectedConcept": "CSS refinement",
+      "layout": "Soft stone background, warm white surfaces, quiet sage details, clear navigation hierarchy, refined tables and comfortable controls.",
+      "responsive": "Preserve stacked mobile navigation, scrolling data tables, and 44px touch targets.",
+      "tokens": "Keep the FurniCraft type and wood accent; use muted sage and low contrast surface changes for hierarchy."
     }
   ]
 }

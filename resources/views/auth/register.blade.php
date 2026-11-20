@@ -2,7 +2,7 @@
 @section('title','Create account')
 @section('body_class','auth-page')
 @section('content')
-<div class="auth-layout compact">
+<div class="auth-layout compact register-layout">
     <section class="auth-story" aria-labelledby="auth-story-title">
         <a class="guest-brand" href="{{ route('home') }}" aria-label="FurniCraft home"><img class="auth-brand-logo" src="{{ asset('images/optimized/lance-logo-circle-64.webp') }}" srcset="{{ asset('images/optimized/lance-logo-circle-64.webp') }} 1x, {{ asset('images/optimized/lance-logo-circle-128.webp') }} 2x" width="56" height="56" alt=""><span>FurniCraft<small>Lance Furniture Shop</small></span></a>
         <div class="auth-story-copy">
@@ -14,10 +14,10 @@
     </section>
     <section class="auth-panel" aria-labelledby="register-heading">
         <div class="auth-panel-inner">
-            <p class="section-kicker">Get started</p>
+            <p class="section-kicker register-kicker">New customer</p>
             <h2 id="register-heading">Create account</h2>
-            <p class="text-muted auth-panel-intro">We will email you a 6-digit verification code before activating your account.</p>
-            <form method="POST" action="{{ route('register.store') }}" class="vstack gap-3 auth-form">
+            <p class="text-muted auth-panel-intro">Create your FurniCraft profile. We’ll email a 6-digit code to verify your address.</p>
+            <form method="POST" action="{{ route('register.store') }}" class="vstack gap-3 auth-form register-form">
                 @csrf
                 <div class="row g-3 registration-name-fields">
                     <div class="col-md-4">
@@ -49,23 +49,23 @@
                             <option value="" @selected(!old('gender'))>Leave blank</option>
                             <option value="female" @selected(old('gender') === 'female')>Female</option>
                             <option value="male" @selected(old('gender') === 'male')>Male</option>
-                            <option value="non_binary" @selected(old('gender') === 'non_binary')>Non-binary</option>
-                            <option value="prefer_not_to_say" @selected(old('gender') === 'prefer_not_to_say')>Prefer not to say</option>
                         </select>
                         @error('gender')<div class="invalid-feedback" id="gender-error">{{ $message }}</div>@enderror
                     </div>
                 </div>
-                <div>
-                    <label class="form-label" for="email">Email address</label>
-                    <input class="form-control @error('email') is-invalid @enderror" id="email" type="email" name="email" value="{{ old('email') }}" maxlength="255" required autocomplete="email" inputmode="email" aria-describedby="register-email-error">
-                    @error('email')<div class="invalid-feedback" id="register-email-error">{{ $message }}</div>@enderror
-                </div>
-                <div>
-                    <label class="form-label" for="phone">Mobile number</label>
-                    @php($phoneValue = old('phone'))
-                    <input class="form-control @error('phone') is-invalid @enderror" id="phone" type="tel" name="phone" value="{{ is_string($phoneValue) ? $phoneValue : '' }}" placeholder="0917 123 4567" maxlength="32" autocomplete="tel" inputmode="tel" required aria-describedby="phone-hint phone-error">
-                    <div class="form-text" id="phone-hint">Required so the shop can contact you about reservations. Use 0917 123 4567 or +63 917 123 4567. We save it in +63 format.</div>
-                    @error('phone')<div class="invalid-feedback" id="phone-error">{{ $message }}</div>@enderror
+                <div class="row g-3 register-contact-fields">
+                    <div class="col-sm-6">
+                        <label class="form-label" for="email">Email address</label>
+                        <input class="form-control @error('email') is-invalid @enderror" id="email" type="email" name="email" value="{{ old('email') }}" maxlength="255" required autocomplete="email" inputmode="email" aria-describedby="register-email-error">
+                        @error('email')<div class="invalid-feedback" id="register-email-error">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label" for="phone">Mobile number</label>
+                        @php($phoneValue = old('phone'))
+                        <input class="form-control @error('phone') is-invalid @enderror" id="phone" type="tel" name="phone" value="{{ is_string($phoneValue) ? $phoneValue : '' }}" placeholder="0917 123 4567" maxlength="32" autocomplete="tel" inputmode="tel" required aria-describedby="phone-hint phone-error">
+                        <div class="form-text" id="phone-hint">For reservation contact. Use 0917 123 4567 or +63 917 123 4567; we save it in +63 format.</div>
+                        @error('phone')<div class="invalid-feedback" id="phone-error">{{ $message }}</div>@enderror
+                    </div>
                 </div>
                 <div class="row g-3">
                     <div class="col-sm-6">

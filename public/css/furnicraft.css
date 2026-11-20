@@ -399,15 +399,13 @@ textarea.form-control { min-height: 110px; }
 .recommendation-item img { width: 150px; aspect-ratio: 4 / 3; padding: .65rem; object-fit: contain; }
 .recommendation-inline-preview { margin-top: 1.5rem; }
 .recommendation-inline-preview .room-comparison { min-height: 0; }
-@media (min-width: 768px) and (max-width: 1199.98px) {
-    .ai-matches-dashboard .recommendation-inline-preview {
-        grid-column: 1 / -1;
-        width: calc(100vw - 3rem);
-        max-width: none;
-        justify-self: stretch;
-        margin-left: calc(50% - 50vw + 1.5rem);
-        margin-right: 0;
-    }
+.ai-matches-dashboard .recommendation-inline-preview {
+    grid-column: 1 / -1;
+    width: calc(100vw - 3rem);
+    max-width: none;
+    justify-self: stretch;
+    margin-left: calc(50% - 50vw + 1.5rem);
+    margin-right: 0;
 }
 .score { color: var(--forest); font-size: 1.35rem; font-weight: 780; letter-spacing: -.04em; }
 .chat-panel { overflow: hidden; color: #f7f1eb; background: var(--forest); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
@@ -2672,6 +2670,28 @@ html:not([data-theme="dark"]) :is(.btn-primary, .btn-dark):is(:active, .active, 
 html:not([data-theme="dark"]) :is(.btn-outline-dark, .btn-outline-primary, .btn-outline-secondary):hover { color: var(--color-text); background-color: var(--color-surface-muted); border-color: var(--color-accent); }
 html:not([data-theme="dark"]) body.auth-page .auth-panel { background: var(--color-surface); }
 html:not([data-theme="dark"]) .auth-page .auth-panel :is(.form-control, .form-select) { color: var(--color-text); background-color: var(--color-surface); border-color: var(--color-border); }
+
+/* Registration uses a denser desktop form so account creation is distinct from sign-in. */
+@media (min-width: 992px) {
+    .auth-page .register-layout .auth-story,
+    .auth-page .register-layout .auth-panel { min-height: 100svh; }
+    .auth-page .register-layout .auth-story { padding: clamp(1.5rem, 3.5vw, 3.5rem); }
+    .auth-page .register-layout .auth-panel { padding: clamp(.65rem, 1.6vh, 1.25rem) clamp(1rem, 2.4vw, 2.5rem); }
+    .auth-page .register-layout .auth-panel-inner { max-width: 610px; }
+    .auth-page .register-layout .register-kicker { display: inline-flex; align-items: center; width: fit-content; margin-bottom: .35rem; padding: .3rem .6rem; color: #684b33; background: #eee3d4; border-radius: 999px; font-size: .72rem; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+    .auth-page .register-layout .auth-panel h2 { margin-bottom: .25rem; font-size: clamp(1.8rem, 2.4vw, 2.3rem); }
+    .auth-page .register-layout .auth-panel-intro { max-width: 520px; margin-bottom: .7rem; font-size: .9rem; line-height: 1.4; }
+    .auth-page .register-form { gap: .5rem !important; }
+    .auth-page .register-form .form-label { margin-bottom: .25rem; font-size: .82rem; }
+    .auth-page .register-form .form-control,
+    .auth-page .register-form .form-select { min-height: 42px; padding-block: .4rem; font-size: .92rem; }
+    .auth-page .register-form .row { --bs-gutter-y: .5rem; }
+    .auth-page .register-form .form-text { margin-top: .2rem; font-size: .7rem; line-height: 1.3; }
+    .auth-page .register-form #optional-account-details { max-width: 62ch; }
+    .auth-page .register-form #registration-privacy-notice { font-size: .7rem; line-height: 1.35; }
+    .auth-page .register-form .btn { min-height: 42px; padding-block: .5rem; }
+    .auth-page .register-layout .auth-switch { margin-top: .75rem; font-size: .85rem; }
+}
 html:not([data-theme="dark"]) .home-page .home-quiet-hero .hero-copy { --color-accent: #68472f; --color-accent-hover: #4b3020; --color-surface: #ffffff; }
 html:not([data-theme="dark"]) .home-page .home-quiet-hero .hero-copy h1 { color: var(--color-accent); }
 html:not([data-theme="dark"]) .home-page .home-quiet-hero .hero-copy :is(.lead, .section-kicker) { color: var(--color-text); }
@@ -3195,6 +3215,242 @@ html:not([data-theme="dark"]) .customer-reservations-page { background-image: li
     .comparison-panel .automatic-placement-note { margin-top: .45rem; padding: .55rem .7rem; font-size: .69rem; }
     .comparison-panel .preview-footer-actions { gap: .45rem; margin-top: .65rem !important; }
     .comparison-panel .preview-footer-actions .btn { min-height: 38px; padding: .4rem .65rem; font-size: .8rem; }
+
+/* Admin and owner workspace: calm retail surfaces with the existing FurniCraft palette. */
+.admin-page {
+    --admin-canvas: #f3f1eb;
+    --admin-surface: #fffefa;
+    --admin-surface-soft: #f5f2ec;
+    --admin-border: #e3ddd2;
+    --admin-ink: #292923;
+    --admin-muted: #69695f;
+    --admin-accent: #624d39;
+    --admin-accent-soft: #eee8de;
+    --admin-sage: #687866;
+    color: var(--admin-ink);
+    background: var(--admin-canvas);
+}
+
+html[data-theme="dark"] .admin-page {
+    --admin-canvas: #1d1e1a;
+    --admin-surface: #262722;
+    --admin-surface-soft: #30312a;
+    --admin-border: #414239;
+    --admin-ink: #eeeae2;
+    --admin-muted: #b7b2a7;
+    --admin-accent: #d7b996;
+    --admin-accent-soft: #39362f;
+    --admin-sage: #a5b19b;
+}
+
+.admin-page > .fc-navbar {
+    min-height: 68px;
+    background: var(--admin-surface);
+    border-bottom: 1px solid var(--admin-border);
+    box-shadow: 0 2px 10px rgba(52, 45, 35, .035);
+}
+
+.admin-page .fc-navbar .navbar-brand { gap: .7rem; }
+.admin-page .fc-navbar .navbar-brand > span { font-size: 1.05rem; font-weight: 680; letter-spacing: -.025em; }
+.admin-page .fc-navbar .navbar-brand small { margin-top: .08rem; font-size: .68rem; letter-spacing: .01em; }
+.admin-page .fc-navbar .navbar-nav { gap: .2rem !important; }
+.admin-page .fc-navbar .nav-link {
+    min-height: 42px;
+    padding-inline: .8rem;
+    color: var(--admin-muted);
+    border-radius: 7px;
+    font-size: .8rem;
+    font-weight: 560;
+    transition: color .18s ease, background-color .18s ease;
+}
+.admin-page .fc-navbar .nav-link:hover,
+.admin-page .fc-navbar .nav-link.active {
+    color: var(--admin-accent) !important;
+    background: var(--admin-accent-soft) !important;
+    box-shadow: none !important;
+}
+.admin-page .fc-navbar .account-button {
+    min-height: 42px;
+    padding-inline: .8rem;
+    color: var(--admin-ink);
+    border: 1px solid var(--admin-border);
+    border-radius: 7px;
+    background: var(--admin-surface);
+}
+.admin-page .fc-navbar .account-button:hover { background: var(--admin-surface-soft); }
+.admin-page .fc-navbar .dropdown-menu {
+    padding: .4rem;
+    border-color: var(--admin-border);
+    border-radius: 9px;
+    background: var(--admin-surface);
+    box-shadow: 0 12px 30px rgba(35, 31, 24, .1);
+}
+.admin-page .fc-navbar .dropdown-item { border-radius: 5px; }
+
+.admin-page .page-shell { background: var(--admin-canvas); }
+.admin-page .page-content { padding-top: clamp(1.25rem, 2.2vw, 2rem); }
+.admin-page .page-heading {
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1.4rem;
+    padding-bottom: 1.15rem;
+    border-color: var(--admin-border);
+}
+.admin-page .page-heading h1 {
+    max-width: 900px;
+    color: var(--admin-ink);
+    font-size: clamp(1.6rem, 2.5vw, 2rem);
+    font-weight: 640;
+    letter-spacing: -.04em;
+    line-height: 1.16;
+}
+.admin-page .page-heading p:not(.section-kicker) {
+    max-width: 76ch;
+    margin-top: .45rem;
+    color: var(--admin-muted);
+    font-size: .9rem;
+    line-height: 1.55;
+}
+.admin-page .section-kicker {
+    color: var(--admin-sage);
+    font-size: .68rem;
+    font-weight: 680;
+    letter-spacing: .085em;
+    text-transform: uppercase;
+}
+.admin-page main :is(h2, .h4) { color: var(--admin-ink); font-size: 1.12rem; font-weight: 630; letter-spacing: -.025em; }
+.admin-page main :is(h3, .h5) { color: var(--admin-ink); font-weight: 620; letter-spacing: -.02em; }
+.admin-page main .text-muted,
+.admin-page main .small.text-muted,
+.admin-page main small { color: var(--admin-muted) !important; }
+
+.admin-page .panel,
+.admin-page .filter-panel,
+.admin-page .metric,
+.admin-page .table-responsive {
+    color: var(--admin-ink);
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(47, 40, 31, .035);
+}
+.admin-page .panel,
+.admin-page .filter-panel { padding: clamp(1rem, 1.8vw, 1.4rem); }
+.admin-page .metric {
+    position: relative;
+    min-width: 0;
+    padding: 1rem 1rem 1rem 1.25rem !important;
+    overflow: hidden;
+}
+.admin-page .metric::before {
+    position: absolute;
+    top: 1rem;
+    left: 0;
+    width: 3px !important;
+    height: 28px !important;
+    margin: 0 !important;
+    border-radius: 0 3px 3px 0;
+    background: var(--admin-sage);
+}
+.admin-page .metric span { color: var(--admin-muted); font-size: .8rem; font-weight: 570; letter-spacing: 0; }
+.admin-page .metric strong { color: var(--admin-ink); font-size: clamp(1.45rem, 2vw, 1.8rem) !important; font-weight: 650; letter-spacing: -.035em; }
+.admin-page .metric small { display: block; margin-top: .25rem; color: var(--admin-muted); }
+
+.admin-page main .table-responsive {
+    margin-bottom: .85rem;
+    overflow: auto;
+}
+.admin-page main .table {
+    --bs-table-color: var(--admin-ink);
+    --bs-table-bg: var(--admin-surface);
+    --bs-table-border-color: var(--admin-border);
+    --bs-table-hover-bg: var(--admin-surface-soft);
+    --bs-table-hover-color: var(--admin-ink);
+    color: var(--admin-ink);
+    margin-bottom: 0;
+}
+.admin-page main .table thead th {
+    color: var(--admin-muted);
+    background: var(--admin-surface-soft);
+    border-bottom: 1px solid var(--admin-border);
+    font-size: .7rem;
+    font-weight: 680;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+.admin-page main .table :is(th, td) { border-color: var(--admin-border); }
+.admin-page main .table tbody tr { transition: background-color .16s ease; }
+.admin-page main .table tbody tr:hover { background: var(--admin-surface-soft); }
+.admin-page main .table tbody td { color: var(--admin-ink); }
+.admin-page main .table tbody td strong { font-weight: 620; }
+.admin-page main .table caption { color: var(--admin-muted); }
+
+.admin-page main :is(.form-control, .form-select) {
+    color: var(--admin-ink);
+    background-color: var(--admin-surface);
+    border-color: var(--admin-border);
+    border-radius: 7px;
+}
+.admin-page main :is(.form-control, .form-select)::placeholder { color: #88867d; }
+.admin-page main :is(.form-control, .form-select):focus {
+    border-color: var(--admin-sage);
+    box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--admin-sage) 20%, transparent);
+}
+.admin-page main .form-label { color: var(--admin-ink); font-weight: 570; }
+.admin-page main .form-text { color: var(--admin-muted); }
+.admin-page main .btn { border-radius: 7px; font-weight: 610; transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.admin-page main .btn-primary,
+.admin-page main .btn-dark {
+    color: #fff;
+    background: #5d4936;
+    border-color: #5d4936;
+}
+.admin-page main .btn-primary:hover,
+.admin-page main .btn-dark:hover { color: #fff; background: #493827; border-color: #493827; }
+.admin-page main .btn-outline-dark,
+.admin-page main .btn-outline-primary {
+    color: var(--admin-accent);
+    border-color: #b7a893;
+}
+.admin-page main .btn-outline-dark:hover,
+.admin-page main .btn-outline-primary:hover { color: var(--admin-accent); background: var(--admin-accent-soft); border-color: #a99781; }
+.admin-page :is(a, button, summary, input, select, textarea):focus-visible {
+    outline: 2px solid var(--admin-sage);
+    outline-offset: 2px;
+}
+.admin-page main .status { border-radius: 999px; font-weight: 640; letter-spacing: .01em; }
+.admin-page .pagination .page-link { color: var(--admin-accent); border-color: var(--admin-border); background: var(--admin-surface); }
+.admin-page .pagination .page-item.active .page-link { color: #fff; border-color: #5d4936; background: #5d4936; }
+.admin-page .pagination .page-item.disabled .page-link { color: var(--admin-muted); background: var(--admin-surface-soft); }
+.admin-page > .site-footer { color: var(--admin-muted); background: var(--admin-surface); border-top: 1px solid var(--admin-border); }
+
+html[data-theme="dark"] .admin-page main .btn-primary,
+html[data-theme="dark"] .admin-page main .btn-dark { color: #241e17; background: #d7b996; border-color: #d7b996; }
+html[data-theme="dark"] .admin-page main .btn-primary:hover,
+html[data-theme="dark"] .admin-page main .btn-dark:hover { color: #241e17; background: #c6a67f; border-color: #c6a67f; }
+html[data-theme="dark"] .admin-page main .table { --bs-table-color: var(--admin-ink); --bs-table-bg: var(--admin-surface); --bs-table-border-color: var(--admin-border); --bs-table-hover-bg: var(--admin-surface-soft); --bs-table-hover-color: var(--admin-ink); }
+html[data-theme="dark"] .admin-page main .table thead th { color: var(--admin-muted); background: var(--admin-surface-soft); }
+html[data-theme="dark"] .admin-page main .table tbody tr:hover { color: var(--admin-ink); background: var(--admin-surface-soft); }
+
+@media (max-width: 1199.98px) {
+    .admin-page .fc-navbar .navbar-collapse { padding-block: .6rem; }
+    .admin-page .fc-navbar .nav-link { padding-inline: .7rem; }
+}
+@media (max-width: 767.98px) {
+    .admin-page > .fc-navbar { min-height: 62px; }
+    .admin-page .page-content { padding-top: 1rem; }
+    .admin-page .page-heading { align-items: flex-start; gap: .85rem; margin-bottom: 1rem; padding-bottom: .9rem; }
+    .admin-page .page-heading h1 { font-size: 1.55rem; }
+    .admin-page .panel,
+    .admin-page .filter-panel { border-radius: 8px; }
+    .admin-page main .table-responsive { border-radius: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .admin-page .fc-navbar .nav-link,
+    .admin-page main .table tbody tr,
+    .admin-page main .btn { transition: none; }
+}
 }
 
 @media (max-width: 767.98px) {
@@ -3214,4 +3470,30 @@ html:not([data-theme="dark"]) .customer-reservations-page { background-image: li
     .room-compare-story .comparison-steps li { grid-template-columns: 24px minmax(0, 1fr); gap: .45rem; }
     .room-compare-story .comparison-steps li > span { width: 24px; height: 24px; }
     .room-compare-story .comparison-steps small { font-size: .7rem; }
+}
+
+/* Keep the admin workspace focused and reduce excess space around page titles. */
+.admin-page .page-content {
+    max-width: 1220px;
+    padding-top: 0;
+}
+.admin-page .page-shell { padding-top: 12px; padding-bottom: 18px; }
+.admin-page .page-heading {
+    gap: .8rem;
+    margin-top: 0;
+    margin-bottom: .7rem;
+    padding-top: 0;
+    padding-bottom: .65rem;
+}
+.admin-page .page-heading h1 { font-size: clamp(1.45rem, 2vw, 1.7rem); }
+.admin-page .page-heading p:not(.section-kicker) {
+    margin-top: .3rem;
+    line-height: 1.42;
+}
+.admin-page .section-kicker { margin-bottom: .25rem; }
+
+@media (max-width: 767.98px) {
+    .admin-page .page-content { max-width: 100%; }
+    .admin-page .page-shell { padding-top: 8px; padding-bottom: 14px; }
+    .admin-page .page-heading { margin-bottom: .55rem; padding-bottom: .55rem; }
 }

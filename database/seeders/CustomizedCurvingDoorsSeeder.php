@@ -32,7 +32,7 @@ class CustomizedCurvingDoorsSeeder extends Seeder
                     'wood_type' => $wood,
                     'varnish_finish' => $finish,
                     'style' => 'Traditional',
-                    'price' => 1000,
+                    'price' => 13000,
                     'width_cm' => 90,
                     'depth_cm' => null,
                     'height_cm' => 210,
