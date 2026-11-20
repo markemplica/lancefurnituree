@@ -29,7 +29,7 @@ class AuthController extends Controller
     {
         $email = $request->old('email');
 
-        return view('auth.login', [
+        return view('auth.logins', [
             'redirect' => $request->validated('redirect'),
             'email' => is_string($email) && mb_strlen($email) <= 255 ? $email : '',
         ]);
@@ -66,7 +66,7 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'The email address or password is incorrect.'])->onlyInput('email');
         }
 
-        $user = User::where('email', $email)->first();
+        $user = User::where('emails', $email)->first();
         $passwordMatches = Hash::check($credentials['password'], $user?->password ?? self::DUMMY_PASSWORD_HASH);
 
         if (! $user || ! $passwordMatches) {
@@ -85,7 +85,7 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'This account is inactive. Please contact Lance Furniture Shop.']);
         }
 
-        Auth::login($user, $request->boolean('remember'));
+        Auth::logout($user, $request->boolean('remember'));
         $request->session()->regenerate();
         $redirect = $credentials['redirect'] ?? '';
         $fallback = $request->user()->isAdmin() ? route('admin.dashboard') : route('home');

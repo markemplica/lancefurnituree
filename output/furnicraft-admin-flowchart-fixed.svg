@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="4050" viewBox="0 0 2300 4050" role="img" aria-labelledby="title desc">
+  <title id="title">FurniCraft Admin Flowchart</title>
+  <desc id="desc">Revised admin flowchart. Every decision has only Yes and No branches, and Yes always leads downward.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.7" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#17212b"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #17212b; }
+      .title { font-size: 43px; font-weight: 700; letter-spacing: 1px; }
+      .subtitle { font-size: 24px; fill: #536273; }
+      .section { font-size: 29px; font-weight: 700; letter-spacing: .4px; }
+      .section-sub { font-size: 19px; fill: #536273; }
+      .shape { fill: #fff; stroke: #253544; stroke-width: 2.5; }
+      .decision { fill: #f5f9fc; stroke: #253544; stroke-width: 2.7; }
+      .connector { fill: none; stroke: #263746; stroke-width: 2.5; marker-end: url(#arrow); }
+      .plain { fill: none; stroke: #263746; stroke-width: 2.5; }
+      .node { font-size: 23px; text-anchor: middle; dominant-baseline: middle; }
+      .small { font-size: 18px; text-anchor: middle; dominant-baseline: middle; }
+      .branch { font-size: 18px; font-weight: 700; fill: #126b50; }
+      .no { font-size: 18px; font-weight: 700; fill: #9a4a30; }
+      .pill { fill: #edf5f2; stroke: #c9ded6; stroke-width: 1.5; }
+      .panel { fill: #fbfcfd; stroke: #c7d1d9; stroke-width: 2; rx: 24; }
+      .end { fill: #f1f6fa; stroke: #253544; stroke-width: 2.5; }
+    </style>
+  </defs>
+
+  <rect width="2300" height="5000" fill="#ffffff"/>
+  <text x="1150" y="65" class="title" text-anchor="middle">FURNICRAFT ADMIN FLOWCHART</text>
+  <text x="1150" y="105" class="subtitle" text-anchor="middle">Sign in, complete an admin task, then return to the dashboard or log out</text>
+  <rect x="785" y="128" width="730" height="42" rx="21" class="pill"/>
+  <text x="1150" y="149" class="small" font-weight="700">Every decision has only YES or NO; every YES branch goes downward.</text>
+
+  <!-- Sign-in and access checks -->
+  <ellipse cx="1150" cy="225" rx="105" ry="38" class="shape"/>
+  <text x="1150" y="225" class="node" font-weight="700">START</text>
+  <path d="M1150 263 V300" class="connector"/>
+  <rect x="830" y="300" width="640" height="74" class="shape" rx="4"/>
+  <text x="1150" y="337" class="node">Open FurniCraft and go to Login</text>
+  <path d="M1150 374 V408" class="connector"/>
+  <rect x="830" y="408" width="640" height="74" class="shape" rx="4"/>
+  <text x="1150" y="445" class="node">Enter the admin email and password</text>
+  <path d="M1150 482 V515" class="connector"/>
+  <polygon points="1150,515 1395,590 1150,665 905,590" class="decision"/>
+  <text x="1150" y="590" class="node"><tspan x="1150" dy="-13">Are the login</tspan><tspan x="1150" dy="29">details valid?</tspan></text>
+  <path d="M1395 590 H1455" class="connector"/>
+  <text x="1410" y="572" class="no">NO</text>
+  <rect x="1455" y="545" width="570" height="92" class="shape" rx="4"/>
+  <text x="1740" y="582" class="node"><tspan x="1740" dy="-12">Show the sign-in error;</tspan><tspan x="1740" dy="28">correct the email or password</tspan></text>
+  <path d="M2025 590 H2160 V445 H1470" class="connector"/>
+  <path d="M1150 665 V710" class="connector"/>
+  <text x="1170" y="694" class="branch">YES</text>
+  <polygon points="1150,710 1395,785 1150,860 905,785" class="decision"/>
+  <text x="1150" y="785" class="node"><tspan x="1150" dy="-13">Is the account</tspan><tspan x="1150" dy="29">verified and active?</tspan></text>
+  <path d="M905 785 H850" class="connector"/>
+  <text x="870" y="766" class="no">NO</text>
+  <rect x="275" y="738" width="575" height="94" class="shape" rx="4"/>
+  <text x="562" y="785" class="node"><tspan x="562" dy="-13">Verify the email or contact the shop</tspan><tspan x="562" dy="29">about an inactive account</tspan></text>
+  <path d="M275 785 H125 V445 H830" class="connector"/>
+  <path d="M1150 860 V905" class="connector"/>
+  <text x="1170" y="889" class="branch">YES</text>
+  <polygon points="1150,905 1395,980 1150,1055 905,980" class="decision"/>
+  <text x="1150" y="980" class="node"><tspan x="1150" dy="-13">Does the account</tspan><tspan x="1150" dy="29">have admin access?</tspan></text>
+  <path d="M1395 980 H1455" class="connector"/>
+  <text x="1410" y="961" class="no">NO</text>
+  <rect x="1455" y="930" width="570" height="100" class="shape" rx="4"/>
+  <text x="1740" y="980" class="node"><tspan x="1740" dy="-13">Log out and sign in with</tspan><tspan x="1740" dy="29">an authorized admin account</tspan></text>
+  <path d="M2025 980 H2160 V445 H1470" class="connector"/>
+  <path d="M1150 1055 V1100" class="connector"/>
+  <text x="1170" y="1084" class="branch">YES</text>
+  <rect x="830" y="1100" width="640" height="86" class="shape" rx="4"/>
+  <text x="1150" y="1143" class="node"><tspan x="1150" dy="-13">Open the Admin Dashboard</tspan><tspan x="1150" dy="29">and review shop activity</tspan></text>
+
+  <!-- Task selector: each Yes drops to its task; each No moves right to the next question. -->
+  <text x="88" y="1245" class="section">CHOOSE AN ADMIN TASK</text>
+  <text x="88" y="1276" class="section-sub">YES selects this task; NO continues right.</text>
+  <path d="M1150 1186 V1310 H203 V1330" class="connector"/>
+  <g>
+    <polygon points="203,1330 313,1365 203,1400 93,1365" class="decision"/>
+    <text x="203" y="1365" class="small"><tspan x="203" dy="-9">Manage furniture</tspan><tspan x="203" dy="22">catalog?</tspan></text>
+    <polygon points="503,1330 613,1365 503,1400 393,1365" class="decision"/>
+    <text x="503" y="1365" class="small"><tspan x="503" dy="-9">Manage a</tspan><tspan x="503" dy="22">reservation?</tspan></text>
+    <polygon points="803,1330 913,1365 803,1400 693,1365" class="decision"/>
+    <text x="803" y="1365" class="small"><tspan x="803" dy="-9">Manage customer</tspan><tspan x="803" dy="22">accounts?</tspan></text>
+    <polygon points="1103,1330 1213,1365 1103,1400 993,1365" class="decision"/>
+    <text x="1103" y="1365" class="small">View reports?</text>
+    <polygon points="1403,1330 1513,1365 1403,1400 1293,1365" class="decision"/>
+    <text x="1403" y="1365" class="small"><tspan x="1403" dy="-9">Review privacy</tspan><tspan x="1403" dy="22">or API use?</tspan></text>
+    <polygon points="1703,1330 1813,1365 1703,1400 1593,1365" class="decision"/>
+    <text x="1703" y="1365" class="small"><tspan x="1703" dy="-9">Assess room</tspan><tspan x="1703" dy="22">placement?</tspan></text>
+  </g>
+  <!-- No-to-next-question arrows -->
+  <path d="M313 1365 H393" class="connector"/><path d="M613 1365 H693" class="connector"/>
+  <path d="M913 1365 H993" class="connector"/><path d="M1213 1365 H1293" class="connector"/>
+  <path d="M1513 1365 H1593" class="connector"/>
+  <g class="no" text-anchor="middle"><text x="353" y="1348">NO</text><text x="653" y="1348">NO</text><text x="953" y="1348">NO</text><text x="1253" y="1348">NO</text><text x="1553" y="1348">NO</text></g>
+  <!-- Yes branches -->
+  <path d="M203 1400 V1450" class="connector"/><path d="M503 1400 V1450" class="connector"/>
+  <path d="M803 1400 V1450" class="connector"/><path d="M1103 1400 V1450" class="connector"/>
+  <path d="M1403 1400 V1450" class="connector"/><path d="M1703 1400 V1450" class="connector"/>
+  <g class="branch" text-anchor="middle"><text x="203" y="1424">YES</text><text x="503" y="1424">YES</text><text x="803" y="1424">YES</text><text x="1103" y="1424">YES</text><text x="1403" y="1424">YES</text><text x="1703" y="1424">YES</text></g>
+  <rect x="88" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="203" y="1513" class="small"><tspan x="203" dy="-36" font-weight="700">Furniture catalog</tspan><tspan x="203" dy="25">Add/edit products and</tspan><tspan x="203" dy="23">photos; update status.</tspan><tspan x="203" dy="23">Delete only without history.</tspan></text>
+  <rect x="388" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="503" y="1513" class="small"><tspan x="503" dy="-25" font-weight="700">Reservation</tspan><tspan x="503" dy="24" font-weight="700">management</tspan><tspan x="503" dy="25">Review request;</tspan><tspan x="503" dy="23">continue in detail below.</tspan></text>
+  <rect x="688" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="803" y="1513" class="small"><tspan x="803" dy="-25" font-weight="700">Customer accounts</tspan><tspan x="803" dy="25">Search accounts and</tspan><tspan x="803" dy="23">review activity; activate</tspan><tspan x="803" dy="23">or deactivate access.</tspan></text>
+  <rect x="988" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="1103" y="1513" class="small"><tspan x="1103" dy="-25" font-weight="700">Reports</tspan><tspan x="1103" dy="25">Choose report type and</tspan><tspan x="1103" dy="23">filters; review records;</tspan><tspan x="1103" dy="23">download CSV or PDF.</tspan></text>
+  <rect x="1288" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="1403" y="1513" class="small"><tspan x="1403" dy="-25" font-weight="700">Privacy and API</tspan><tspan x="1403" dy="25">Review privacy audit</tspan><tspan x="1403" dy="23">records or AI service</tspan><tspan x="1403" dy="23">usage information.</tspan></text>
+  <rect x="1588" y="1450" width="230" height="126" class="shape" rx="4"/>
+  <text x="1703" y="1513" class="small"><tspan x="1703" dy="-25" font-weight="700">Room placement</tspan><tspan x="1703" dy="25">Review room and preview;</tspan><tspan x="1703" dy="23">assess floor, zone,</tspan><tspan x="1703" dy="23">clearance and scale.</tspan></text>
+  <!-- No after the final task -->
+  <path d="M1813 1365 H1900 V1450" class="connector"/>
+  <text x="1845" y="1350" class="no">NO</text>
+  <rect x="1840" y="1450" width="370" height="126" class="shape" rx="4"/>
+  <text x="2025" y="1513" class="small"><tspan x="2025" dy="-12">No task selected.</tspan><tspan x="2025" dy="25">Return to the dashboard.</tspan></text>
+  <path d="M2210 1513 H2260 V1143 H1470" class="connector"/>
+
+  <!-- Main task completion and return choice -->
+  <path d="M203 1576 V1650 H1150 M803 1576 V1650 H1150 M1103 1576 V1650 H1150 M1403 1576 V1650 H1150 M1703 1576 V1650 H1150" class="plain"/>
+  <path d="M1150 1650 V1690" class="connector"/>
+  <circle cx="1150" cy="1650" r="5" fill="#263746"/>
+  <path d="M503 1576 V1615" class="connector"/>
+  <circle cx="503" cy="1650" r="32" class="shape"/><text x="503" y="1650" class="small" font-weight="700">R</text>
+  <rect x="835" y="1690" width="630" height="78" class="shape" rx="4"/>
+  <text x="1150" y="1729" class="node">Task completed or changes saved</text>
+  <path d="M1150 1768 V1810" class="connector"/>
+  <polygon points="1150,1810 1395,1885 1150,1960 905,1885" class="decision"/>
+  <text x="1150" y="1885" class="node"><tspan x="1150" dy="-13">Perform another</tspan><tspan x="1150" dy="29">admin task?</tspan></text>
+  <path d="M1150 1960 V2000" class="connector"/><text x="1170" y="1984" class="branch">YES</text>
+  <rect x="890" y="2000" width="520" height="68" class="shape" rx="4"/>
+  <text x="1150" y="2034" class="node">Return to the Admin Dashboard</text>
+  <path d="M890 2034 H45 V1143 H830" class="connector"/>
+  <path d="M1395 1885 H1540" class="connector"/><text x="1450" y="1867" class="no">NO</text>
+  <rect x="1540" y="1848" width="490" height="74" class="shape" rx="4"/>
+  <text x="1785" y="1885" class="node">Log out and end the admin session</text>
+  <path d="M1785 1922 V1975" class="connector"/>
+  <ellipse cx="1785" cy="2015" rx="95" ry="34" class="end"/>
+  <text x="1785" y="2015" class="node" font-weight="700">END</text>
+
+  <!-- Reservation detail -->
+  <rect x="70" y="2145" width="2160" height="1810" class="panel"/>
+  <text x="1150" y="2205" class="section" text-anchor="middle">RESERVATION MANAGEMENT DETAIL</text>
+  <text x="1150" y="2238" class="section-sub" text-anchor="middle">All decision branches in this detail also use YES downward and NO sideways.</text>
+  <circle cx="1150" cy="2300" r="34" class="shape"/><text x="1150" y="2300" class="node" font-weight="700">R</text>
+  <path d="M1150 2334 V2375" class="connector"/>
+  <rect x="700" y="2375" width="900" height="112" class="shape" rx="4"/>
+  <text x="1150" y="2431" class="node"><tspan x="1150" dy="-14">Review customer and furniture details, visit or customization notes,</tspan><tspan x="1150" dy="30">and any available preview.</tspan></text>
+  <path d="M1150 2487 V2560 H390 V2600" class="connector"/>
+
+  <!-- A sequence of binary reservation decisions; yes branches drop to their action. -->
+  <polygon points="390,2600 530,2647 390,2694 250,2647" class="decision"/>
+  <text x="390" y="2647" class="small"><tspan x="390" dy="-9">Approve this</tspan><tspan x="390" dy="22">request?</tspan></text>
+  <polygon points="920,2600 1060,2647 920,2694 780,2647" class="decision"/>
+  <text x="920" y="2647" class="small"><tspan x="920" dy="-9">Decline this</tspan><tspan x="920" dy="22">request?</tspan></text>
+  <polygon points="1450,2600 1590,2647 1450,2694 1310,2647" class="decision"/>
+  <text x="1450" y="2647" class="small"><tspan x="1450" dy="-9">Cancel an open</tspan><tspan x="1450" dy="22">request?</tspan></text>
+  <path d="M530 2647 H780" class="connector"/><text x="645" y="2628" class="no">NO</text>
+  <path d="M1060 2647 H1310" class="connector"/><text x="1175" y="2628" class="no">NO</text>
+  <path d="M1590 2647 H1750 V2720" class="connector"/><text x="1660" y="2628" class="no">NO</text>
+  <rect x="1700" y="2720" width="420" height="105" class="shape" rx="4"/>
+  <text x="1910" y="2772" class="small"><tspan x="1910" dy="-12" font-weight="700">Keep the request pending</tspan><tspan x="1910" dy="25">or leave it unchanged.</tspan></text>
+  <path d="M390 2694 V2720" class="connector"/><text x="410" y="2710" class="branch">YES</text>
+  <path d="M920 2694 V2720" class="connector"/><text x="940" y="2710" class="branch">YES</text>
+  <path d="M1450 2694 V2720" class="connector"/><text x="1470" y="2710" class="branch">YES</text>
+  <rect x="220" y="2720" width="340" height="105" class="shape" rx="4"/>
+  <text x="390" y="2772" class="small"><tspan x="390" dy="-12" font-weight="700">Approve the request</tspan><tspan x="390" dy="25">Save approval and history;</tspan><tspan x="390" dy="23">queue customer notification.</tspan></text>
+  <rect x="750" y="2720" width="340" height="105" class="shape" rx="4"/>
+  <text x="920" y="2772" class="small"><tspan x="920" dy="-12" font-weight="700">Decline the request</tspan><tspan x="920" dy="25">Record DECLINED and enter</tspan><tspan x="920" dy="23">the required reason.</tspan></text>
+  <rect x="1280" y="2720" width="340" height="105" class="shape" rx="4"/>
+  <text x="1450" y="2772" class="small"><tspan x="1450" dy="-12" font-weight="700">Cancel the request</tspan><tspan x="1450" dy="25">Cancel an open request</tspan><tspan x="1450" dy="23">as appropriate.</tspan></text>
+
+  <!-- Approved-only later update check -->
+  <path d="M390 2825 V2910" class="connector"/>
+  <polygon points="390,2910 600,2975 390,3040 180,2975" class="decision"/>
+  <text x="390" y="2975" class="small"><tspan x="390" dy="-20">Record a later</tspan><tspan x="390" dy="23">approved-request</tspan><tspan x="390" dy="23">update?</tspan></text>
+  <path d="M390 3040 V3100" class="connector"/><text x="410" y="3076" class="branch">YES</text>
+  <rect x="190" y="3100" width="400" height="105" class="shape" rx="4"/>
+  <text x="390" y="3152" class="small"><tspan x="390" dy="-12" font-weight="700">Record item readiness</tspan><tspan x="390" dy="25">or close as completed,</tspan><tspan x="390" dy="23">claimed or no-show.</tspan></text>
+  <path d="M600 2975 H720 V3310 H900" class="connector"/><text x="620" y="2957" class="no">NO</text>
+
+  <!-- Merge reservation actions into save/history and return connector -->
+  <path d="M390 3205 V3310 H900 M920 2825 V3310 H900 M1450 2825 V3310 H900 M1910 2825 V3310 H1400 M900 3310 H1400" class="plain"/>
+  <path d="M900 3310 V3350" class="connector"/>
+  <rect x="650" y="3350" width="1000" height="112" class="shape" rx="4"/>
+  <text x="1150" y="3406" class="node"><tspan x="1150" dy="-14">System saves changes and status history;</tspan><tspan x="1150" dy="30">queues notifications for applicable updates.</tspan></text>
+  <path d="M1150 3462 V3510" class="connector"/>
+  <circle cx="1150" cy="3550" r="34" class="shape"/><text x="1150" y="3550" class="node" font-weight="700">T</text>
+  <text x="1150" y="3620" class="section-sub" text-anchor="middle">Return to “Task completed” in the main flow.</text>
+  <text x="1150" y="3652" class="section-sub" text-anchor="middle">Approval does not guarantee stock, payment or item readiness.</text>
+
+  <text x="1150" y="3740" class="section-sub" text-anchor="middle">Flowchart key</text>
+  <ellipse cx="530" cy="3805" rx="70" ry="30" class="shape"/><text x="530" y="3805" class="small">Start / End</text>
+  <rect x="760" y="3775" width="170" height="60" class="shape" rx="4"/><text x="845" y="3805" class="small">Action</text>
+  <polygon points="1110,3775 1200,3805 1110,3835 1020,3805" class="decision"/><text x="1110" y="3805" class="small">Decision</text>
+  <path d="M1370 3805 H1520" class="connector"/><text x="1595" y="3805" class="small">Arrow shows flow</text>
+  <text x="1150" y="3895" class="section-sub" text-anchor="middle">All answers leaving a decision are labeled YES or NO. No task letters or “other” answer branches remain.</text>
+</svg>

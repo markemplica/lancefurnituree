@@ -150,6 +150,9 @@
     <form method="POST" action="{{ route('reservations.store') }}" class="vstack gap-3" data-reservation-form>
         @csrf
         <input type="hidden" name="furniture_product_id" value="{{ $selectedProduct->id }}">
+        @if($recommendation)
+            <input type="hidden" name="recommendation_id" value="{{ $recommendation->id }}">
+        @endif
         <div>
             <label class="form-label" for="visualize-preferred-visit-at">Preferred visit date and time <span class="text-muted">optional</span></label>
             <input class="form-control" type="datetime-local" id="visualize-preferred-visit-at" name="preferred_visit_at" min="{{ now()->format('Y-m-d\\TH:i') }}">

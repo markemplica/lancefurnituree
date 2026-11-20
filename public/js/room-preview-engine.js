@@ -692,6 +692,10 @@
             if (price) price.textContent = button.dataset.productPrice || '0.00';
             const link = document.querySelector('[data-inline-preview-link]');
             if (link) link.href = button.dataset.productUrl || '#';
+            const reservationProductId = document.querySelector('[data-reservation-product-id]');
+            if (reservationProductId) reservationProductId.value = button.dataset.productId || '';
+            const reservationProductName = document.querySelector('[data-reservation-product-name]');
+            if (reservationProductName) reservationProductName.textContent = button.dataset.productName || 'Selected furniture';
             document.querySelectorAll('[data-recommendation-preview]').forEach((control) => {
                 const selected = control === button;
                 control.setAttribute('aria-pressed', String(selected));

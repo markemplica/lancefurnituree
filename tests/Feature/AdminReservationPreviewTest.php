@@ -87,4 +87,20 @@ class AdminReservationPreviewTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('admin.reservations.preview', $reservation))
             ->assertOk()->assertSee('room photo is no longer available')->assertDontSee('data-room-preview-canvas', false);
     }
+
+    public function test_admin_can_manually_mark_doorway_corners_when_analysis_has_no_valid_quad(): void
+    {
+        $reservation = $this->reservation();
+        $reservation->product->update(['category' => 'Door', 'width_cm' => 80, 'depth_cm' => 4, 'height_cm' => 210]);
+        $reservation->recommendation->roomImage->update(['analysis' => [
+            'openings' => [['type' => 'doorway', 'bbox' => [20, 10, 60, 80]]],
+        ]]);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('admin.reservations.preview', $reservation))
+            ->assertOk()
+            ->assertSee('data-manual-door-placement', false)
+            ->assertSee('Mark doorway corners')
+            ->assertSee('data-room-id="'.$reservation->recommendation->room_image_id.'"', false);
+    }
 }

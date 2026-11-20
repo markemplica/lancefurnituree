@@ -150,11 +150,36 @@
             </div>
             @endif
             <div class="room-preview-actions">
+                <button type="button" class="btn btn-outline-primary" data-reservation-open aria-haspopup="dialog" aria-controls="reservation-dialog">Reserve this furniture</button>
                 <button type="button" class="btn btn-primary" data-preview-download disabled>Download preview (PNG)</button>
             </div>
             <p class="automatic-placement-note">Preview is an estimate, not a measurement. Verify actual dimensions with Lance Furniture Shop before reserving.</p>
         </div>
     </section>
+    <dialog id="reservation-dialog" class="reservation-dialog" aria-labelledby="reservation-dialog-title">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+            <h2 class="h4" id="reservation-dialog-title">Request a reservation</h2>
+            <button type="button" class="btn-close" data-reservation-close aria-label="Close reservation form"></button>
+        </div>
+        <p class="fw-semibold" data-reservation-product-name>{{ $previewProduct->name }}</p>
+        <div data-reservation-message role="status" tabindex="-1" hidden></div>
+        <p class="small text-muted">This sends a request for shop review. It does not hold the item or collect payment; the shop will confirm availability.</p>
+        <form method="POST" action="{{ route('reservations.store') }}" class="vstack gap-3" data-reservation-form>
+            @csrf
+            <input type="hidden" name="furniture_product_id" value="{{ $previewProduct->id }}" data-reservation-product-id>
+            <input type="hidden" name="recommendation_id" value="{{ $recommendation->id }}">
+            <div>
+                <label class="form-label" for="recommendation-reservation-visit-at">Preferred visit date and time <span class="text-muted">optional</span></label>
+                <input class="form-control" type="datetime-local" id="recommendation-reservation-visit-at" name="preferred_visit_at" min="{{ now()->format('Y-m-d\\TH:i') }}">
+            </div>
+            <div>
+                <label class="form-label" for="recommendation-reservation-notes">Notes <span class="text-muted">optional</span></label>
+                <textarea class="form-control" id="recommendation-reservation-notes" name="notes" rows="3" maxlength="1000" placeholder="Questions or preferred viewing schedule"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">Send reservation request</button>
+        </form>
+        <div class="text-center mt-3" data-reservation-done hidden><button type="button" class="btn btn-primary">Done</button></div>
+    </dialog>
 @endif
 
     @if($recommendation->items->isNotEmpty())

@@ -9,7 +9,15 @@
 @elseif($available)
     <p class="small text-muted">No saved preview image is available. This local 2D estimate is reconstructed from the linked room analysis and reserved furniture; it may differ from the customer's earlier preview.</p>
     <p class="small"><span data-placement-status>Preparing local preview</span> <span data-placement-dimensions></span></p>
+    @if(str_contains(strtolower($product->recommendationType()), 'door') && !data_get($placement, 'renderable', false))
+        <div class="manual-door-placement" data-manual-door-placement>
+            <button type="button" class="btn btn-sm btn-outline-dark" data-manual-door-mark aria-pressed="false">Mark doorway corners</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-manual-door-reset hidden>Reset marked corners</button>
+            <p class="small text-muted mb-0" data-manual-door-instructions role="status" aria-live="polite">No valid doorway corners were saved with this analysis. In the preview below, click top-left, top-right, bottom-right, then bottom-left. This estimate is temporary in this browser; confirm the doorway measurements with the customer.</p>
+        </div>
+    @endif
     <div class="room-preview-frame" data-room-preview data-preview-v2-enabled="false" data-consented="false" data-placement-status="fallback"
+        data-room-id="{{ $room->id }}"
         data-visual-scale-policy='@json(config("roompreview.visual_scale"))'
         data-product-id="{{ $product->id }}" data-product-name="{{ $product->name }}" data-product-type="{{ $product->recommendationType() }}" data-product-category="{{ $product->category }}"
         data-product-width="{{ $product->width_cm }}" data-product-depth="{{ $product->depth_cm }}" data-product-height="{{ $product->height_cm }}"
