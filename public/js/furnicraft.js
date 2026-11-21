@@ -890,7 +890,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (catalogHeading) {
         const navigation = document.querySelector('.fc-navbar');
         const catalog = catalogHeading.closest('.catalog-page');
-        const sidebar = catalog.querySelector('.catalog-filters');
         let layoutFrame;
         const syncCatalogOffsets = () => {
             const navigationHeight = navigation?.getBoundingClientRect().height || 0;
@@ -899,8 +898,6 @@ document.addEventListener('DOMContentLoaded', () => {
             catalog.style.setProperty('--catalog-nav-height', `${navigationHeight}px`);
             catalog.style.setProperty('--catalog-content-offset', `${offset}px`);
             document.documentElement.style.setProperty('--catalog-content-offset', `${offset}px`);
-            // Keep every filter reachable when a short viewport cannot fit the whole sidebar.
-            catalog.classList.toggle('catalog-filters-flow', Boolean(sidebar && sidebar.getBoundingClientRect().height > window.innerHeight - offset - 8));
         };
         const scheduleCatalogOffsets = () => {
             cancelAnimationFrame(layoutFrame);
@@ -909,7 +906,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const observer = new ResizeObserver(scheduleCatalogOffsets);
         observer.observe(catalogHeading);
         if (navigation) observer.observe(navigation);
-        if (sidebar) observer.observe(sidebar);
         window.addEventListener('resize', scheduleCatalogOffsets);
         syncCatalogOffsets();
     }
@@ -935,18 +931,6 @@ document.addEventListener('DOMContentLoaded', () => {
         applyButton?.classList.add('d-none');
         let timer, searchController;
         let requestNumber = 0;
-        let resettingFilters = false;
-        const clearFilters = () => {
-            resettingFilters = true;
-            for (const name of ['category', 'style', 'wood_type', 'varnish_finish', 'min_price', 'max_price']) {
-                const field = form.elements.namedItem(name);
-                if (field) {
-                    field.value = '';
-                    field.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-            resettingFilters = false;
-        };
         const cancelSearch = () => {
             clearTimeout(timer);
             searchController?.abort();
@@ -995,11 +979,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }, delay);
         };
         input.addEventListener('input', () => {
-            clearFilters();
             updateCatalog(280);
         });
         form.addEventListener('change', (event) => {
-            if (!resettingFilters && event.target.matches('select, input[type="number"]')) updateCatalog();
+            if (event.target.matches('select, input[type="number"]')) updateCatalog();
         });
         if (clearSearch) {
             clearSearch.hidden = input.value.length === 0;

@@ -2,8 +2,8 @@
     <section class="recommendation-chat-panel chat-panel" data-chat-panel id="recommendation-chat-panel" aria-labelledby="recommendation-chat-title" role="dialog" hidden>
         <header class="recommendation-chat-head chat-head">
             <div>
-                <h2 id="recommendation-chat-title">Ask about these matches</h2>
-                <p>Some answers are handled locally. Questions needing an AI response may be sent with recommendation and catalog details to {{ \App\Services\AiProvider::label() }}, separately from room-photo consent. Avoid sharing sensitive personal information. <a href="{{ route('privacy-policy') }}">Privacy information</a>.</p>
+                <h2 id="recommendation-chat-title">FurniCraft AI</h2>
+                <p>Ask about products, prices, or room fit. AI may use your question with catalog details; photo consent is separate. Avoid sensitive information. <a href="{{ route('privacy-policy') }}">Privacy</a>.</p>
             </div>
             <button class="recommendation-chat-close" type="button" data-chat-close aria-label="Close chat">×</button>
         </header>

@@ -97,23 +97,20 @@
                 @foreach($furnitureTypes as $type)<option value="{{ $type }}" @selected(old('furniture_type',$preference?->furniture_type)===$type)>{{ $type }}</option>@endforeach
             </select><div class="form-text">Recommendations will only include this category.</div></div>
             <?php
-                $budgetRanges = [];
-                for ($upper = 10000; $upper <= 100000; $upper += 10000) {
-                    $lower = $upper === 10000 ? 1000 : $upper - 10000 + 0.01;
-                    $budgetRanges[$lower.'-'.$upper] = 'PHP '.number_format($lower, 2).' – '.number_format($upper, 2);
-                }
-                $budgetRanges['100000.01-500000'] = 'PHP 100,000.01 – 500,000.00';
                 $savedMinimum = old('budget_min', $preference?->budget_min);
                 $savedMaximum = old('budget_max', $preference?->budget_max);
-                $savedMinimum = is_numeric($savedMinimum) && $savedMinimum >= 0 && $savedMinimum <= 9999999999.99 ? $savedMinimum : null;
-                $savedMaximum = is_numeric($savedMaximum) && $savedMaximum >= 0 && $savedMaximum <= 9999999999.99 ? $savedMaximum : null;
-                $selectedBudget = old('budget_range', $savedMinimum !== null && $savedMaximum !== null ? (float) $savedMinimum.'-'.(float) $savedMaximum : '');
-                $selectedBudget = is_string($selectedBudget) && strlen($selectedBudget) <= 64 ? $selectedBudget : '';
-                if ($selectedBudget && !isset($budgetRanges[$selectedBudget]) && $savedMinimum !== null && $savedMaximum !== null) {
-                    $budgetRanges[$selectedBudget] = 'PHP '.number_format($savedMinimum, 2).' – '.number_format($savedMaximum, 2).' (saved budget)';
-                }
+                $savedMinimum = is_numeric($savedMinimum) && $savedMinimum >= 0 && $savedMinimum <= 9999999999.99 ? number_format((float) $savedMinimum, 2, '.', '') : '';
+                $savedMaximum = is_numeric($savedMaximum) && $savedMaximum >= 0 && $savedMaximum <= 9999999999.99 ? number_format((float) $savedMaximum, 2, '.', '') : '';
             ?>
-            <div class="col-md-8"><label class="form-label" for="budget_range">Budget range</label><select class="form-select" id="budget_range" name="budget_range" required><option value="">Choose your budget</option>@foreach($budgetRanges as $value => $label)<option value="{{ $value }}" @selected($selectedBudget === $value)>{{ $label }}</option>@endforeach</select><div class="form-text">Preset budgets start at PHP 1,000.00.</div></div>
+            <div class="col-md-4">
+                <label class="form-label" for="budget_min">Minimum budget (PHP)</label>
+                <input class="form-control" id="budget_min" name="budget_min" type="number" min="0" max="9999999999.99" step="0.01" inputmode="decimal" value="{{ $savedMinimum }}" required aria-describedby="budget-help">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="budget_max">Maximum budget (PHP)</label>
+                <input class="form-control" id="budget_max" name="budget_max" type="number" min="0" max="9999999999.99" step="0.01" inputmode="decimal" value="{{ $savedMaximum }}" required aria-describedby="budget-help">
+                <div class="form-text" id="budget-help">Maximum budget must be higher than minimum.</div>
+            </div>
             @foreach([
                 ['field' => 'style', 'label' => 'Furniture style', 'any' => 'Open to any style', 'values' => $styles],
                 ['field' => 'wood_type', 'label' => 'Wood type', 'any' => 'Any wood', 'values' => $woodTypes],

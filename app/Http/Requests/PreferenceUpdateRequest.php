@@ -56,4 +56,11 @@ class PreferenceUpdateRequest extends FormRequest
 
         return ['budget_range' => $rangeRules] + $preferenceRules;
     }
+
+    public function messages(): array
+    {
+        return [
+            'budget_max.gt' => 'The maximum budget must be greater than the minimum budget.',
+        ];
+    }
 }

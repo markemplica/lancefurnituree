@@ -9,6 +9,7 @@ return [
         'Butterfly Door',
         'Dining Set',
         'Sala Set',
+        'Plain Bed',
         'Curving Bed',
         'Console',
     ],

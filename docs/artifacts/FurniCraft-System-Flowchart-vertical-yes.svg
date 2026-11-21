@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="3900" viewBox="0 0 1600 3900" role="img" aria-labelledby="title description">
+  <title id="title">FurniCraft System Flowchart — Customer Planning and Reservation Workflow</title>
+  <desc id="description">A top-to-bottom flowchart. Every YES branch continues straight down the central path; NO branches leave to side actions and return to the workflow where appropriate.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#222"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #111; }
+      .title { font-size: 42px; font-weight: 700; letter-spacing: .4px; }
+      .subtitle { font-size: 25px; fill: #333; }
+      .node { fill: #fff; stroke: #222; stroke-width: 3; }
+      .decision { fill: #fff; stroke: #222; stroke-width: 3; }
+      .terminal { fill: #fff; stroke: #222; stroke-width: 3; }
+      .node-text { font-size: 24px; text-anchor: middle; dominant-baseline: middle; }
+      .branch { font-size: 20px; font-weight: 700; }
+      .connector { fill: none; stroke: #222; stroke-width: 3; marker-end: url(#arrow); }
+      .note { font-size: 18px; fill: #333; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="3900" fill="#fff"/>
+  <text class="title" x="800" y="62" text-anchor="middle">FURNICRAFT SYSTEM FLOWCHART</text>
+  <text class="subtitle" x="800" y="103" text-anchor="middle">Customer planning and reservation workflow</text>
+
+  <!-- Central YES path -->
+  <ellipse class="terminal" cx="800" cy="170" rx="118" ry="46"/>
+  <text class="node-text" x="800" y="170">START</text>
+  <path class="connector" d="M800 216 V270"/>
+
+  <rect class="node" x="460" y="272" width="680" height="104"/>
+  <text class="node-text" x="800" y="324">
+    <tspan x="800" dy="-12">Customer opens the</tspan><tspan x="800" dy="31">FurniCraft website.</tspan>
+  </text>
+  <path class="connector" d="M800 376 V428"/>
+
+  <polygon class="decision" points="800,430 1080,520 800,610 520,520"/>
+  <text class="node-text" x="800" y="520">
+    <tspan x="800" dy="-16">Does the customer have</tspan><tspan x="800" dy="30">an existing account?</tspan>
+  </text>
+  <text class="branch" x="822" y="641">YES</text>
+  <path class="connector" d="M800 610 V675"/>
+
+  <!-- NO: account creation rejoins at browse -->
+  <text class="branch" x="1095" y="506">NO</text>
+  <path class="connector" d="M1080 520 H1190"/>
+  <rect class="node" x="1192" y="454" width="350" height="132"/>
+  <text class="node-text" x="1367" y="520">
+    <tspan x="1367" dy="-29">Creates a new account</tspan><tspan x="1367" dy="30">and verifies the</tspan><tspan x="1367" dy="30">email code.</tspan>
+  </text>
+  <path class="connector" d="M1367 586 V1132 H1142"/>
+
+  <rect class="node" x="460" y="677" width="680" height="104"/>
+  <text class="node-text" x="800" y="729">
+    <tspan x="800" dy="-12">Customer enters their</tspan><tspan x="800" dy="31">login credentials.</tspan>
+  </text>
+  <path class="connector" d="M800 781 V835"/>
+
+  <polygon class="decision" points="800,837 1080,927 800,1017 520,927"/>
+  <text class="node-text" x="800" y="927">
+    <tspan x="800" dy="-31">Are the credentials valid,</tspan><tspan x="800" dy="29">and is the account</tspan><tspan x="800" dy="29">verified and active?</tspan>
+  </text>
+  <text class="branch" x="822" y="1046">YES</text>
+  <path class="connector" d="M800 1017 V1078"/>
+
+  <!-- NO: correct credentials, verify email, or contact shop -->
+  <text class="branch" x="458" y="913" text-anchor="end">NO</text>
+  <path class="connector" d="M520 927 H390"/>
+  <rect class="node" x="46" y="856" width="342" height="144"/>
+  <text class="node-text" x="217" y="928">
+    <tspan x="217" dy="-44">Corrects sign-in details</tspan><tspan x="217" dy="29">or verifies email;</tspan><tspan x="217" dy="29">contacts shop if inactive.</tspan>
+  </text>
+  <path class="connector" d="M217 856 V730 H458"/>
+
+  <rect class="node" x="460" y="1080" width="680" height="104"/>
+  <text class="node-text" x="800" y="1132">
+    <tspan x="800" dy="-12">Customer browses furniture details</tspan><tspan x="800" dy="31">and opens Plan your room.</tspan>
+  </text>
+  <path class="connector" d="M800 1184 V1230"/>
+
+  <rect class="node" x="460" y="1232" width="680" height="118"/>
+  <text class="node-text" x="800" y="1291">
+    <tspan x="800" dy="-30">Customer saves furniture type, budget,</tspan><tspan x="800" dy="30">style, wood, and finish</tspan><tspan x="800" dy="30">in Plan your room.</tspan>
+  </text>
+  <path class="connector" d="M800 1350 V1404"/>
+
+  <polygon class="decision" points="800,1406 1080,1496 800,1586 520,1496"/>
+  <text class="node-text" x="800" y="1496">
+    <tspan x="800" dy="-14">Use a room photo?</tspan>
+  </text>
+  <text class="branch" x="822" y="1614">YES</text>
+  <path class="connector" d="M800 1586 V1650"/>
+
+  <!-- YES: photo upload and analysis stay on the central vertical path -->
+  <rect class="node" x="460" y="1652" width="680" height="122"/>
+  <text class="node-text" x="800" y="1713">
+    <tspan x="800" dy="-30">Uploads or selects a saved room photo</tspan><tspan x="800" dy="30">and chooses whether to allow</tspan><tspan x="800" dy="30">AI analysis.</tspan>
+  </text>
+  <path class="connector" d="M800 1774 V1816"/>
+
+  <rect class="node" x="460" y="1818" width="680" height="112"/>
+  <text class="node-text" x="800" y="1874">
+    <tspan x="800" dy="-16">System prepares consented AI room analysis</tspan><tspan x="800" dy="31">or local fallback guidance.</tspan>
+  </text>
+  <path class="connector" d="M800 1930 V1990"/>
+
+  <!-- NO: skip photo and rejoin at recommendations -->
+  <text class="branch" x="1095" y="1480">NO</text>
+  <path class="connector" d="M1080 1496 H1180 V1834 H1210"/>
+  <rect class="node" x="1212" y="1774" width="330" height="120"/>
+  <text class="node-text" x="1377" y="1834">
+    <tspan x="1377" dy="-15">Continues without a</tspan><tspan x="1377" dy="30">room photo.</tspan>
+  </text>
+  <path class="connector" d="M1377 1894 V2055 H1142"/>
+
+  <rect class="node" x="460" y="1992" width="680" height="126"/>
+  <text class="node-text" x="800" y="2055">
+    <tspan x="800" dy="-31">System filters and ranks furniture</tspan><tspan x="800" dy="30">using hybrid recommendations;</tspan><tspan x="800" dy="30">a 2D preview is shown when available.</tspan>
+  </text>
+  <path class="connector" d="M800 2118 V2172"/>
+
+  <polygon class="decision" points="800,2174 1080,2264 800,2354 520,2264"/>
+  <text class="node-text" x="800" y="2264">
+    <tspan x="800" dy="-15">Is the customer satisfied</tspan><tspan x="800" dy="30">with the furniture options?</tspan>
+  </text>
+  <text class="branch" x="822" y="2382">YES</text>
+  <path class="connector" d="M800 2354 V2414"/>
+
+  <!-- NO: refine options and return to saved preferences -->
+  <text class="branch" x="458" y="2250" text-anchor="end">NO</text>
+  <path class="connector" d="M520 2264 H390"/>
+  <rect class="node" x="46" y="2194" width="342" height="140"/>
+  <text class="node-text" x="217" y="2264">
+    <tspan x="217" dy="-30">Adjusts preferences or uses</tspan><tspan x="217" dy="30">the chatbot to refine</tspan><tspan x="217" dy="30">furniture choices.</tspan>
+  </text>
+  <path class="connector" d="M46 2264 H24 V1291 H458"/>
+
+  <rect class="node" x="460" y="2416" width="680" height="106"/>
+  <text class="node-text" x="800" y="2469">
+    <tspan x="800" dy="-13">Customer selects a furniture item</tspan><tspan x="800" dy="31">and reviews its product details.</tspan>
+  </text>
+  <path class="connector" d="M800 2522 V2572"/>
+
+  <rect class="node" x="460" y="2574" width="680" height="124"/>
+  <text class="node-text" x="800" y="2636">
+    <tspan x="800" dy="-30">Submits a reservation request;</tspan><tspan x="800" dy="30">a visit date and custom-design details</tspan><tspan x="800" dy="30">may be included.</tspan>
+  </text>
+  <path class="connector" d="M800 2698 V2748"/>
+
+  <rect class="node" x="460" y="2750" width="680" height="106"/>
+  <text class="node-text" x="800" y="2803">
+    <tspan x="800" dy="-13">System saves a PENDING request</tspan><tspan x="800" dy="31">and provides a reference number.</tspan>
+  </text>
+  <path class="connector" d="M800 2856 V2906"/>
+
+  <rect class="node" x="460" y="2908" width="680" height="104"/>
+  <text class="node-text" x="800" y="2960">
+    <tspan x="800" dy="-12">Shop administrator reviews</tspan><tspan x="800" dy="31">the reservation request.</tspan>
+  </text>
+  <path class="connector" d="M800 3012 V3060"/>
+
+  <polygon class="decision" points="800,3062 1080,3152 800,3242 520,3152"/>
+  <text class="node-text" x="800" y="3152">
+    <tspan x="800" dy="-15">Does the shop approve</tspan><tspan x="800" dy="30">the reservation request?</tspan>
+  </text>
+  <text class="branch" x="822" y="3270">YES</text>
+  <path class="connector" d="M800 3242 V3298"/>
+
+  <!-- NO: record decline and join END -->
+  <text class="branch" x="1095" y="3138">NO</text>
+  <path class="connector" d="M1080 3152 H1190"/>
+  <rect class="node" x="1192" y="3084" width="350" height="142"/>
+  <text class="node-text" x="1367" y="3155">
+    <tspan x="1367" dy="-30">System records DECLINED;</tspan><tspan x="1367" dy="30">customer sees the reason</tspan><tspan x="1367" dy="30">and updated request status.</tspan>
+  </text>
+  <path class="connector" d="M1367 3226 V3654 H918"/>
+
+  <rect class="node" x="460" y="3300" width="680" height="106"/>
+  <text class="node-text" x="800" y="3353">
+    <tspan x="800" dy="-13">System records REQUEST APPROVED</tspan><tspan x="800" dy="31">and notifies the customer.</tspan>
+  </text>
+  <path class="connector" d="M800 3406 V3452"/>
+
+  <rect class="node" x="460" y="3454" width="680" height="106"/>
+  <text class="node-text" x="800" y="3507">
+    <tspan x="800" dy="-13">Customer tracks the request and</tspan><tspan x="800" dy="31">confirms readiness with the shop.</tspan>
+  </text>
+  <path class="connector" d="M800 3560 V3606"/>
+
+  <ellipse class="terminal" cx="800" cy="3654" rx="118" ry="46"/>
+  <text class="node-text" x="800" y="3654">END</text>
+
+  <text class="note" x="800" y="3770">Room-photo AI analysis requires consent; unavailable analysis uses local fallback. A 2D preview is a visual estimate.</text>
+  <text class="note" x="800" y="3800">A signed-in customer may also submit a reservation directly from a catalog product page.</text>
+  <text class="note" x="800" y="3830">Reservations require shop review. Confirm stock, measurements, clearance, and payment arrangements with the shop.</text>
+  <text class="note" x="800" y="3860">Customers can cancel pending or approved requests and remove cancelled requests from their own list.</text>
+</svg>

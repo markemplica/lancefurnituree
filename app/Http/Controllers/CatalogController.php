@@ -37,11 +37,21 @@ class CatalogController extends Controller
             $request->query->replace(array_diff_key($request->query(), $validator->errors()->messages()));
         }
         $query = FurnitureProduct::where('status', 'active')->withCount(['favorites', 'views', 'reservations']);
-        foreach (['category', 'style', 'wood_type', 'varnish_finish'] as $filter) {
-            if ($request->filled($filter)) {
-                $query->where($filter, $request->input($filter));
+        $selectedCategory = $request->input('category');
+        $categoryFamily = $this->catalogCategoryFamily($selectedCategory);
+        // Keep the selected category exact by itself. During search, add matching
+        // products from the same furniture family without mixing unrelated categories.
+        if ($request->filled('category')) {
+            if ($categoryFamily !== null && $request->filled('q')) {
+                $query->whereIn('category', $categoryFamily);
+            } else {
+                $query->where('category', $selectedCategory);
             }
         }
+        $selectedFilters = collect(['style', 'wood_type', 'varnish_finish'])
+            ->filter(fn (string $filter) => $request->filled($filter))
+            ->mapWithKeys(fn (string $filter) => [$filter => $request->input($filter)])
+            ->all();
         if ($request->filled('min_price')) {
             $query->where('price', '>=', $request->input('min_price'));
         }
@@ -49,13 +59,36 @@ class CatalogController extends Controller
             $query->where('price', '<=', $request->input('max_price'));
         }
         if ($request->filled('q')) {
-            $this->applyCatalogSearch($query, trim((string) $request->input('q')));
+            $term = trim((string) $request->input('q'));
+            if ($request->filled('category') || $selectedFilters !== []) {
+                // Keep the selected category/filter results and add search matches.
+                // The outer category and budget constraints still guard both branches.
+                $query->where(function (Builder $matches) use ($selectedFilters, $term, $selectedCategory, $categoryFamily) {
+                    $matches->where(function (Builder $filtered) use ($selectedFilters, $selectedCategory) {
+                        if ($selectedCategory !== null && $selectedCategory !== '') {
+                            $filtered->where('category', $selectedCategory);
+                        }
+                        foreach ($selectedFilters as $filter => $value) {
+                            $filtered->where($filter, $value);
+                        }
+                    })->orWhere(function (Builder $searched) use ($term) {
+                        $this->applyCatalogSearch($searched, $term);
+                    });
+                });
+            } else {
+                $this->applyCatalogSearch($query, $term);
+            }
+        } else {
+            foreach ($selectedFilters as $filter => $value) {
+                $query->where($filter, $value);
+            }
         }
         $products = $query->orderBy('name')->paginate(16)->withQueryString();
         $options = FurnitureProduct::catalogFilterOptions();
         $favoriteIds = $request->user()?->favorites()->pluck('furniture_products.id') ?? collect();
 
-        $data = compact('products', 'options', 'favoriteIds');
+        $catalogCategories = $options['categories'];
+        $data = compact('products', 'options', 'favoriteIds', 'catalogCategories', 'selectedCategory');
         if ($validator->errors()->isNotEmpty()) {
             $data['errors'] = (new ViewErrorBag)->put('default', $validator->errors());
         }
@@ -105,12 +138,60 @@ class CatalogController extends Controller
         // Both routes share matching fields and typo handling. Keep OR matches
         // grouped so inactive products and unrelated filters cannot leak through.
         $query->where(function (Builder $matches) use ($patterns) {
-            foreach (['name', 'category', 'style', 'description', 'tags'] as $field) {
+            foreach (['name', 'category', 'style', 'wood_type', 'varnish_finish', 'description', 'tags'] as $field) {
                 foreach ($patterns as $pattern) {
                     $matches->orWhere($field, 'like', $pattern);
                 }
             }
         });
+    }
+
+    private function catalogCategoryFamily(?string $category): ?array
+    {
+        if ($category === null || trim($category) === '') {
+            return null;
+        }
+        $family = $this->categoryFamilyLabel($category);
+        if ($family === null) {
+            return null;
+        }
+
+        $categories = collect(config('furnicraft.catalog_categories', []))
+            ->merge(FurnitureProduct::active()->select('category')->distinct()->pluck('category'));
+
+        return $categories
+            ->filter(fn (string $candidate) => $this->categoryFamilyLabel($candidate) === $family)
+            ->push($category)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function categoryFamilyLabel(?string $category): ?string
+    {
+        if ($category === null) {
+            return null;
+        }
+        $normalized = strtolower(trim($category));
+        $families = [
+            'door' => ['door', 'full curving'],
+            'bed' => ['bed'],
+            'chair' => ['chair'],
+            'cabinet' => ['cabinet', 'wardrobe'],
+            'console' => ['console'],
+            'dining' => ['dining', 'table'],
+            'sala' => ['sala', 'sofa', 'couch', 'living room'],
+        ];
+
+        foreach ($families as $family => $markers) {
+            foreach ($markers as $marker) {
+                if (str_contains($normalized, $marker)) {
+                    return $family;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function catalogValidator(Request $request, bool $searchOnly = false): \Illuminate\Contracts\Validation\Validator
